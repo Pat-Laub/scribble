@@ -109,8 +109,8 @@
   var ink = read();          // { slideKey: [stroke, ...] }
   var widths = readWidths(); // { tool: width }, as left by the panel's − and +
   var undos = {}, redos = {};// { slideKey: [JSON snapshot, ...] }
-  var tool = null;           // active tool; null exactly when the panel is closed
-  var lastTool = 'pen';      // restored when the panel is reopened
+  var tool = 'pen';          // this deck opens ready to write
+  var lastTool = 'pen';      // restored after temporarily hiding the tools
   var hidden = false;        // the ink is parked, showing the slide underneath
   var colour = COLOURS[0][1];
   var live = null;           // { stroke, el } while a stroke is being drawn
@@ -127,7 +127,7 @@
   var pointers = false;      // pointer events arrive here, so touches are ignored
   var touching = null;       // identifier of the touch a stroke is being drawn with
   var hovers = 0;            // consecutive hovering mouse moves; see hover()
-  var W, H, surface, panel, picker, toggle, saveTimer;
+  var W, H, surface, panel, picker, saveTimer;
 
   /* ------------------------------ stroke maths --------------------------- */
 
@@ -765,7 +765,6 @@
   function sync() {
     var key = slideKey(), on = !!tool && !hidden;
     panel.classList.toggle('active', on);
-    toggle.classList.toggle('active', on);
     surface.classList.toggle('drawing', on);
     Object.keys(layers).forEach(function (t) {
       layers[t].classList.toggle('ink-hidden', hidden);
@@ -878,7 +877,6 @@
     panel = document.createElement('div');
     panel.className = 'ink-panel';
     panel.innerHTML =
-      button('data-act', 'close', 'Close (Esc)') +
       COLOURS.map(function (c) {
         return '<button class="ink-swatch" data-colour="' + c[1] + '" style="color:' + c[1] +
           '" title="' + c[0] + '"></button>';
@@ -916,15 +914,6 @@
     });
     panel.appendChild(picker);
 
-    toggle = document.createElement('button');
-    toggle.className = 'ink-toggle ink-pen';
-    toggle.title = 'Annotate (d), hide the ink (v)';
-    toggle.innerHTML = icon('pen');
-    toggle.addEventListener('click', function () {
-      if (hidden) return hide(false);  // parked ink comes back before anything else
-      open(!tool);
-    });
-
     var full = document.createElement('button');
     full.className = 'ink-toggle';
     full.title = 'Full screen (f)';
@@ -936,7 +925,6 @@
     // Sit clear of the menu plugin's button, which shares this corner.
     if (document.querySelector('.slide-menu-button')) launchers.classList.add('ink-offset');
     launchers.appendChild(full);
-    launchers.appendChild(toggle);
 
     var parent = Reveal.getRevealElement();
     parent.appendChild(panel);
@@ -981,21 +969,16 @@
 
     Reveal.on('slidechanged', render);
     Reveal.on('overviewshown', function () { open(false); });  // one layer, one slide
-    Reveal.addKeyBinding(
-      { keyCode: 68, key: 'D', description: 'Toggle drawing tools' },
-      function () { open(!tool); }
-    );
+    Reveal.on('overviewhidden', function () { open(true); });
     Reveal.addKeyBinding(
       { keyCode: 86, key: 'V', description: 'Hide/show the annotations' },
       function () { hide(!hidden); }
     );
 
-    // Capture phase, so Escape closes the panel instead of opening the overview.
+    // Capture the annotation shortcuts before reveal sees them.
     document.addEventListener('keydown', function (e) {
       if (!tool) return;
-      if (e.key === 'Escape') {
-        open(false);
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         e.shiftKey ? step(redos, undos) : step(undos, redos);
       } else if ((e.key === '[' || e.key === ']') && TOOLS[tool]) {
         resize(e.key === ']');

@@ -10,7 +10,7 @@
 #
 # Ink is stored per slide, keyed by slide *index*, so inserting a separator in
 # the middle shifts everything after it onto the wrong page. Add new slides at
-# the end. Press `d` (or the pen button) to start drawing.
+# the end. The drawing tools are available as soon as the deck opens.
 #
 # Deck-wide settings (theme, drawing plugin, dimensions) live in _quarto.yml.
 ---

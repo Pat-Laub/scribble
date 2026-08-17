@@ -5,7 +5,7 @@ Drawing uses the MIT-licensed [perfect-freehand](https://github.com/steveruizok/
 
 ## Using it
 
-Press `d` during a presentation (or click the pen in the bottom-left corner) to open drawing tools. Choose a pen, highlighter or eraser and one of five colours. `Cmd/Ctrl+Z` undoes, `v` hides ink, and `Esc` puts the tools away. Scribble over a stroke, or hold the right mouse/stylus barrel button, to erase it.
+The drawing tools are open as soon as the deck starts. Choose a pen, highlighter or eraser and one of five colours. `Cmd/Ctrl+Z` undoes and `v` hides or restores ink. Scribble over a stroke, or hold the right mouse/stylus barrel button, to erase it.
 
 Annotations are saved locally by slide and survive reloads. Use the panel's export/import buttons to move them to another browser or device. Add blank slides only at the end of `index.qmd`: annotations are keyed by slide index.
 

@@ -448,6 +448,37 @@
     return (evs && evs.length ? evs : [e]).map(at);
   }
 
+  // Safari on iPadOS hands back samples it has already handed back: each
+  // pointermove's coalesced batch opens with the whole of the batch the move
+  // before it carried. Appending those walks the stroke back over itself and
+  // forward again, and perfect-freehand reads every fold as a change of
+  // direction and caps it the way it caps the end of a stroke — which is why an
+  // Apple Pencil draws a chain of separate segments where a mouse or a Wacom,
+  // whose moves carry no repeats, draws one line. Half the points in a Pencil
+  // stroke arrive this way.
+  //
+  // A pen standing still is the only thing that puts two samples on the same
+  // tenth of a unit, and dropping one of those costs nothing, so a point the
+  // recent tail already holds is a repeat.
+  var REPEAT = 32;  // how far back to look; a coalesced batch is far shorter
+
+  function fresh(batch, p) {
+    var tail = p.slice(-REPEAT), out = [];
+    for (var i = 0; i < batch.length; i++) {
+      if (seen(tail, batch[i])) continue;
+      out.push(batch[i]);
+      if (tail.push(batch[i]) > REPEAT) tail.shift();
+    }
+    return out;
+  }
+
+  function seen(tail, q) {
+    for (var i = 0; i < tail.length; i++) {
+      if (tail[i][0] === q[0] && tail[i][1] === q[1]) return true;
+    }
+    return false;
+  }
+
   // The modifier reveal's zoom plugin magnifies on (ctrl on Linux, otherwise
   // alt), honouring an explicit `zoomKey`; the same one the arrow-key panning
   // in reveal-fixes.html looks for.
@@ -539,7 +570,9 @@
     // stroke is not a swipe, so the moves that make it up stop here.
     e.stopPropagation();
     if (erasing) { points(e).forEach(function (p) { erase(p[0], p[1]); }); return; }
-    live.stroke.p = live.stroke.p.concat(points(e));
+    var added = fresh(points(e), live.stroke.p);
+    if (!added.length) return;
+    live.stroke.p = live.stroke.p.concat(added);
     live.el.setAttribute('d', pathData(live.stroke, true));
     scribble();
   }

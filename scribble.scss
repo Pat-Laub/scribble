@@ -1,0 +1,67 @@
+/*-- scss:defaults --*/
+
+// The reveal `white` theme with its typography left alone — nothing is typeset
+// on these slides, so the only things that matter are the paper colour and the
+// small amount of chrome drawn on top of it.
+$backgroundColor: #ffffff;
+$mainColor: #1d1d1d;
+// Used by the slide counter and reveal's arrows; the drawing rail reads
+// --r-link-color for its two launcher buttons.
+$linkColor: #4465e9;
+$linkColorHover: #7089ef;
+
+// Defaults used by the accompanying freehand annotation controls.
+$ink-accent: #4465e9;
+$ink-panel-width: 44px;
+$ink-button-size: 34px;
+
+/*-- scss:rules --*/
+
+// Keep the chrome quiet: on a blank page the arrows and counter are the only
+// marks, and they should not compete with the ink.
+.reveal .controls {
+  opacity: 0.35;
+}
+
+.reveal .controls:hover {
+  opacity: 1;
+}
+
+// Reveal parks the counter bottom-right, which is now directly under the
+// navigation arrows. Send it to the opposite corner: it is a thing you glance
+// at, not one you reach for, so it has no business sharing a corner with the
+// only two buttons you press while drawing. `right` is reveal's own 8px and is
+// left alone; only the vertical anchor swaps.
+//
+// Qualified with `.reveal-viewport` purely to win a specificity fight: Quarto's
+// footer.css also sets `bottom` on the counter and loads after this theme, so a
+// plain `.reveal .slide-number` ties and loses on source order. Losing it is
+// not a cosmetic matter — `top` and `bottom` both live on an absolutely
+// positioned box stretches it to full height, and since the counter carries
+// z-index 31 it would become an invisible column down the right edge that eats
+// every tap meant for the arrows below it.
+.reveal-viewport .reveal .slide-number {
+  top: 8px;
+  bottom: auto;
+  background: transparent;
+  color: #1d1d1d59;
+  font-size: 14px;
+}
+
+// Empty sections still get reveal's default top padding, which shifts nothing
+// visible but does move the drawing origin. Zero it so the canvas covers the
+// slide exactly.
+.reveal .slides section {
+  padding: 0;
+  height: 100%;
+}
+
+// The progress bar along the bottom is a *button* as well as a gauge: reveal
+// hangs a 10px-tall invisible strip above the 3px bar (`.progress::after`) and
+// jumps to whichever slide you clicked along its width. Brushing the bottom of
+// the screen — easy to do with a pencil, or with a laptop trackpad — therefore
+// throws you a long way forward or back. Keep the bar and take away the click;
+// it stops the `::after` strip from being hit too.
+.reveal .progress {
+  pointer-events: none;
+}

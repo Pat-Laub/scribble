@@ -1,0 +1,22 @@
+# Quarto internals & caches
+/.quarto/
+/_freeze/
+
+# The reference copy of the course template this project was extracted from
+# (a symlink to a sibling checkout, not part of this repo).
+/course-template
+
+# Stray output from rendering index.qmd on its own, outside the project build.
+# Only at the root: docs/index_files/ is the real thing and must be committed,
+# since Pages serves docs/ as-is and every reveal.js asset is in it.
+/*_files/
+
+# OS noise
+.DS_Store
+
+# Note: docs/ is committed on purpose — GitHub Pages serves the deck from it.
+
+# Dropbox sync artifacts (this project lives in a synced folder)
+*conflicted copy*
+
+**/*.quarto_ipynb

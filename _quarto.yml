@@ -1,0 +1,37 @@
+project:
+  type: default
+  # Committed to git so GitHub Pages can serve the deck straight from docs/.
+  output-dir: docs
+
+format:
+  revealjs:
+    # A blank writing surface: no title slide, no headings, no theme chrome
+    # beyond the slide counter. Everything on screen is drawn by hand.
+    # The browser tab / bookmark name. `pagetitle` rather than `title` because
+    # a `title` would bring back the title slide this deck does without —
+    # without one Quarto names the tab after the file, i.e. "index".
+    pagetitle: Scribble
+    theme: [white, scribble.scss, annotate.scss]
+    controls: true
+    # Keep both arrows in the bottom-right corner, clear of the drawing tools.
+    controls-layout: bottom-right
+    # Reveal fades the back arrow to 30% so an audience isn't drawn backwards.
+    # Here it is a control you reach for yourself, and at 30% it disappears
+    # under ink.
+    controls-back-arrows: visible
+    navigation-mode: linear
+    transition: none
+    slide-number: c/t
+    # The deck is the whole page — no scrollbars, no reveal "scroll view".
+    embed-resources: false
+    preview-links: false
+    margin: 0
+    width: 1120
+    height: 700
+    # Keep the address bar in step with the current slide (see also
+    # reveal-fixes.html) without adding a Back-button entry per slide, so
+    # reloading on the iPad returns to the slide you were writing on.
+    history: false
+    # `reveal-fixes.html` loads the MIT-licensed freehand annotation tool.
+    # Ink is saved per slide in the browser's localStorage and can be exported.
+    include-after-body: reveal-fixes.html

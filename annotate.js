@@ -103,6 +103,8 @@
   };
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var STORE = 'reveal-ink:' + location.pathname;
+  var PRINT = /(?:^|[?&])print-pdf(?:[=&]|$)/i.test(location.search);
+  var PRINT_INK = PRINT && /(?:^|[?&])ink(?:[=&]|$)/i.test(location.search);
   var RULE_STORE = 'reveal-ink-rules';
   var RULE_SPACING_STORE = 'reveal-ink-rule-spacing';
   var PRESSURE_STORE = 'reveal-ink-pressure';
@@ -551,6 +553,125 @@
       save();
     };
     reader.readAsText(file);
+  }
+
+  /* ---------------------------- ink in the PDF --------------------------- */
+
+  // Open Reveal's own one-slide-per-page print view. Both windows share the
+  // same localStorage origin, so the print window can lay the current ink and
+  // ruled-guide preference over the pages without uploading either anywhere.
+  function printPdf() {
+    var url = new URL(location.href);
+    url.hash = '';
+    url.search = '?print-pdf&pdfMaxPagesPerSlide=1&ink=1';
+    window.open(url.href, '_blank');
+  }
+
+  // The print view is built asynchronously after Reveal becomes ready. Wait
+  // for its page wrappers whether `pdf-ready` fires before or after this file
+  // starts, then add inert SVG layers and open the browser print dialog.
+  function printInk() {
+    var cfg = Reveal.getConfig();
+    W = parseFloat(cfg.width) || 960;
+    H = parseFloat(cfg.height) || 700;
+    view = [-OVERSCAN * W, -OVERSCAN * H, (1 + 2 * OVERSCAN) * W, (1 + 2 * OVERSCAN) * H];
+    var finished = false;
+    function layOut() {
+      if (finished) return true;
+      var pages = document.querySelectorAll('.pdf-page');
+      if (!pages.length) return false;
+      finished = true;
+      var annotated = 0;
+      pages.forEach(function (page) { if (layPrintPage(page)) annotated += 1; });
+      settled().then(function () {
+        printBar(annotated, pages.length);
+        window.print();
+      });
+      return true;
+    }
+    if (!layOut()) {
+      Reveal.on('pdf-ready', layOut);
+      var checks = setInterval(function () { if (layOut()) clearInterval(checks); }, 50);
+      setTimeout(function () { clearInterval(checks); }, 10000);
+    }
+  }
+
+  // Place rules against the exact slide-sized rectangle, then overscanned ink
+  // above them. Explicit section IDs survive Reveal's print DOM reshuffle, so
+  // authored, uncounted and replacement slides all retrieve their own ink;
+  // fragment animation states intentionally retain their containing slide ID.
+  function layPrintPage(page) {
+    var slide = page.querySelector('section');
+    if (!slide) return false;
+    var list = ink[AnnotationModel.slideKey(slide)] || [];
+    var pr = page.getBoundingClientRect();
+    var sr = slide.getBoundingClientRect();
+    var scale = (sr.width / W) || 1;
+    var left = (pr.width - W * scale) / 2;
+    var top = (pr.height - H * scale) / 2;
+    page.style.position = 'relative';
+
+    if (ruled) {
+      var rules = document.createElementNS(SVG_NS, 'svg');
+      rules.setAttribute('class', 'ink-print ink-print-rules');
+      rules.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+      rules.style.cssText = 'position:absolute;left:' + left + 'px;top:' + top + 'px' +
+        ';width:' + (W * scale) + 'px;height:' + (H * scale) + 'px';
+      var rulePath = document.createElementNS(SVG_NS, 'path');
+      rulePath.setAttribute('d', rulePathData());
+      rules.appendChild(rulePath);
+      page.appendChild(rules);
+    }
+
+    ['highlighter', 'pen'].forEach(function (t) {
+      var drawn = list.filter(function (stroke) { return stroke.t === t; });
+      if (!drawn.length) return;
+      var layer = document.createElementNS(SVG_NS, 'svg');
+      layer.setAttribute('class', 'ink-print ink-' + t);
+      layer.setAttribute('viewBox', view.join(' '));
+      layer.style.cssText = 'position:absolute' +
+        ';left:' + (left - OVERSCAN * W * scale) + 'px' +
+        ';top:' + (top - OVERSCAN * H * scale) + 'px' +
+        ';width:' + (view[2] * scale) + 'px;height:' + (view[3] * scale) + 'px';
+      drawn.forEach(function (stroke) { layer.appendChild(pathFor(stroke)); });
+      page.appendChild(layer);
+    });
+    return list.length > 0;
+  }
+
+  function settled() {
+    var fonts = document.fonts && document.fonts.ready
+      ? document.fonts.ready.catch(function () {})
+      : Promise.resolve();
+    var images = Array.prototype.map.call(document.images, function (img) {
+      if (img.complete) return Promise.resolve();
+      return new Promise(function (resolve) {
+        img.addEventListener('load', resolve, { once: true });
+        img.addEventListener('error', resolve, { once: true });
+      });
+    });
+    return Promise.race([
+      Promise.all([fonts].concat(images)),
+      new Promise(function (resolve) { setTimeout(resolve, 5000); })
+    ]);
+  }
+
+  // Keep a small retry strip in the print window in case the dialog is closed
+  // or sent to a printer accidentally. CSS excludes the strip from the PDF.
+  function printBar(annotated, pages) {
+    var el = document.createElement('div');
+    el.className = 'ink-print-bar';
+    el.innerHTML = '<span></span><button type="button">Print / Save PDF</button>' +
+      '<button type="button">Close</button>';
+    var message = annotated
+      ? annotated + (annotated === 1 ? ' annotated slide' : ' annotated slides')
+      : 'No annotations saved for this deck';
+    if (ruled) message += ' · ruled guides on ' + pages + (pages === 1 ? ' page' : ' pages');
+    el.firstChild.textContent = message + ' — turn on Background graphics';
+    var buttons = el.querySelectorAll('button');
+    buttons[0].addEventListener('click', function () { window.print(); });
+    buttons[1].addEventListener('click', function () { window.close(); });
+    document.body.appendChild(el);
   }
 
   /* ------------------------------- drawing ------------------------------- */
@@ -1113,6 +1234,7 @@
     rules: '<path d="M4 6h16M4 12h16M4 18h16"/>',
     download: '<path d="M12 4v11"/><path d="M8 11.5l4 4 4-4"/><path d="M4.5 19.5h15"/>',
     upload: '<path d="M12 15.5v-11"/><path d="M8 8.5l4-4 4 4"/><path d="M4.5 19.5h15"/>',
+    print: '<path d="M7.5 9.5V4.5h9v5"/><path d="M7.5 17.5H5.5A1.5 1.5 0 0 1 4 16v-5A1.5 1.5 0 0 1 5.5 9.5h13A1.5 1.5 0 0 1 20 11v5a1.5 1.5 0 0 1-1.5 1.5h-2"/><path d="M7.5 14h9v5.5h-9z"/>',
     more: '<circle cx="6" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1" fill="currentColor" stroke="none"/>',
     fullscreen: '<path d="M4 9V4h5"/><path d="M15 4h5v5"/><path d="M20 15v5h-5"/><path d="M9 20H4v-5"/>'
   };
@@ -1461,6 +1583,7 @@
         option('data-act', 'pressure', 'Pencil pressure', 'Apple Pencil pressure changes stroke width') +
         '<hr>' +
         option('data-act', 'clear', 'Clear this slide', 'Clear this slide (⇧ for the whole deck)') +
+        option('data-act', 'print', 'Save annotated PDF') +
         option('data-act', 'download', 'Export annotations') +
         option('data-act', 'upload', 'Import annotations') +
       '</div>';
@@ -1533,6 +1656,8 @@
         moreOpen = !moreOpen;
       } else if (b.dataset.act === 'download') {
         download();
+      } else if (b.dataset.act === 'print') {
+        printPdf();
       } else if (b.dataset.act === 'upload') {
         picker.click();
       }
@@ -1609,7 +1734,11 @@
   // initialising; wait for it, as the other fixes in this deck do.
   function ready() {
     if (!window.Reveal || !Reveal.isReady || !Reveal.isReady()) return false;
-    init();
+    if (PRINT) {
+      if (PRINT_INK) printInk();
+    } else {
+      init();
+    }
     return true;
   }
   if (!ready()) {

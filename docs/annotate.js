@@ -104,7 +104,9 @@
   var STORE = 'reveal-ink:' + location.pathname;
   var RULE_STORE = 'reveal-ink-rules';
   var PRESSURE_STORE = 'reveal-ink-pressure';
-  var PRESSURE_BOOST = 1.25;
+  // Centre ordinary light Pencil writing near perfect-freehand's neutral 0.5
+  // width, while retaining useful room on either side for pressure variation.
+  var PRESSURE = { baseline: 0.35, scale: 0.75 };
   var RULES = { spacing: 52, margin: 64 };
 
   /* -------------------------------- state -------------------------------- */
@@ -460,13 +462,15 @@
     ];
   }
 
-  // Pressure, read the way the scribble deck reads it: a stylus's own force, a
-  // quarter more than it reports, since writing at what feels like an ordinary
-  // weight sits well below the middle of the range. Anything else reports the
-  // same number for the whole stroke, so it goes down the middle and
-  // perfect-freehand is left to guess the width from the speed instead.
+  // Apple Pencil's light-writing range sits well below the middle of its raw
+  // scale. Lift it towards perfect-freehand's neutral 0.5 so enabling pressure
+  // changes variation rather than making the whole stroke abruptly narrower.
+  // With sensitivity off, a stylus stays at 0.5; non-stylus strokes also store
+  // 0.5 but ask perfect-freehand to simulate pressure from their speed.
   function force(e) {
-    return AnnotationModel.pressureSample(stylus, pressureEnabled, e.pressure, PRESSURE_BOOST);
+    return AnnotationModel.pressureSample(
+      stylus, pressureEnabled, e.pressure, PRESSURE.baseline, PRESSURE.scale
+    );
   }
 
   // The test for a device with pressure to give: it says it is a pen, or the

@@ -9,18 +9,20 @@ test('recognises classic and desktop-mode iPads without classifying Macs', () =>
   assert.equal(isIPad({ userAgent: 'Mozilla/5.0 (Windows)', platform: 'Win32', maxTouchPoints: 10 }), false);
 });
 
-test('enabled stylus pressure is retained with the configured boost', () => {
-  assert.equal(pressureSample(true, true, 0.4, 1.25), 0.5);
-  assert.equal(pressureSample(true, true, 0.8, 1.25), 1);
+test('enabled stylus pressure is centred around the fixed-width baseline', () => {
+  assert.equal(pressureSample(true, true, 0.1, 0.35, 0.75), 0.425);
+  assert.equal(pressureSample(true, true, 0.2, 0.35, 0.75), 0.5);
+  assert.equal(pressureSample(true, true, 0.8, 0.35, 0.75), 0.9500000000000001);
+  assert.equal(pressureSample(true, true, 1, 0.35, 0.75), 1);
 });
 
 test('disabled stylus pressure produces a constant-width sample', () => {
-  assert.equal(pressureSample(true, false, 0.1, 1.25), 0.5);
-  assert.equal(pressureSample(true, false, 0.9, 1.25), 0.5);
+  assert.equal(pressureSample(true, false, 0.1, 0.35, 0.75), 0.5);
+  assert.equal(pressureSample(true, false, 0.9, 0.35, 0.75), 0.5);
 });
 
 test('non-stylus input stays neutral for simulated pressure', () => {
-  assert.equal(pressureSample(false, true, 0, 1.25), 0.5);
+  assert.equal(pressureSample(false, true, 0, 0.35, 0.75), 0.5);
 });
 
 test('legacy strokes capture their current tool width exactly once', () => {

@@ -6,8 +6,9 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.AnnotationModel = api;
 })(typeof window !== 'undefined' ? window : this, function () {
-  function pressureSample(stylus, pressureEnabled, rawPressure, boost) {
-    return stylus && pressureEnabled ? rawPressure * boost : 0.5;
+  function pressureSample(stylus, pressureEnabled, rawPressure, baseline, scale) {
+    if (!stylus || !pressureEnabled) return 0.5;
+    return Math.min(1, Math.max(0, baseline + rawPressure * scale));
   }
 
   // Since iPadOS 13, Safari can identify an iPad as a desktop-class Mac. A real

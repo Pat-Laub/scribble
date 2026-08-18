@@ -47,4 +47,5 @@ format:
     history: false
     # `reveal-fixes.html` loads the MIT-licensed freehand annotation tool.
     # Ink is saved per slide in the browser's localStorage and can be exported.
+    include-in-header: scribble-bootstrap.html
     include-after-body: reveal-fixes.html

@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ASSETS = [
+  'scribble-pages.js',
   'palm-rejection.js',
   'perfect-freehand.min.js',
   'annotate-geometry.js',

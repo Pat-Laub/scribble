@@ -618,6 +618,7 @@
       format: 'scribble-ink',
       version: 6,
       canvas: { width: W, height: H },
+      pages: window.ScribblePages ? ScribblePages.count() : Reveal.getTotalSlides(),
       ink: kept(),
       diagnostics: diagnosticReport()
     };
@@ -638,6 +639,12 @@
         return;
       }
       ink = data.ink;
+      if (window.ScribblePages) {
+        ScribblePages.ensure(Math.max(
+          Number(data.pages) || 1,
+          ScribblePages.requiredPageCount(Object.keys(ink))
+        ));
+      }
       undos = {};  // the ink these described is not the ink that is here now
       redos = {};
       clipboard = null;
@@ -1055,15 +1062,17 @@
     save();
   }
 
-  function nextSlide() {
-    return AnnotationModel.nextItem(Reveal.getSlides(), Reveal.getCurrentSlide());
+  function nextSlide(create) {
+    var target = AnnotationModel.nextItem(Reveal.getSlides(), Reveal.getCurrentSlide());
+    if (!target && create && window.ScribblePages) target = ScribblePages.append();
+    return target;
   }
 
   // The common lecture move as one action: retain a clipboard copy, advance to
   // the next actual reveal section (including an uncounted replacement slide),
   // and place the copied working at the writing margin ready to drag or resize.
   function continueSelection() {
-    var target = selected.length && nextSlide();
+    var target = selected.length && nextSlide(true);
     if (!target) return;
     copySelection();
     var indices = Reveal.getIndices(target);
@@ -1710,7 +1719,7 @@
     act('copy').disabled = !selected.length;
     act('paste').disabled = !clipboard || !clipboard.strokes.length;
     act('delete').disabled = !selected.length;
-    act('continue').disabled = !selected.length || !nextSlide();
+    act('continue').disabled = !selected.length || (!nextSlide() && !window.ScribblePages);
     act('rules').classList.toggle('active', ruled);
     act('rules-closer').disabled = !ruled || ruleSpacing <= RULES.min;
     act('rules-farther').disabled = !ruled || ruleSpacing >= RULES.max;

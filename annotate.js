@@ -48,7 +48,7 @@
   // guess suits a narrower nib, so `share` takes it to 0.62 of the width above.
   var TOOLS = {
     pen: {
-      thinning: 0.62, smoothing: 0.62, streamline: 0.62,
+      thinning: 0.85, smoothing: 0.62, streamline: 0.62,
       easing: function (t) { return t * 0.65 + Math.sin(t * Math.PI / 2) * 0.35; },
       simulated: {
         share: 0.62, thinning: 0.5, smoothing: 0.62, streamline: 0.64,

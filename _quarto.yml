@@ -37,8 +37,8 @@ format:
     margin: 0
     # 16:9 matches modern lecture-room displays and avoids an invisible white
     # letterbox at the left and right that looked drawable but was outside the
-    # overview/PDF page. Keep the 700-unit height so existing ink retains its
-    # familiar physical scale; annotate.js recentres legacy 1120x700 ink once.
+    # overview/PDF page. The 700-unit height also gives handwriting practical,
+    # easy-to-tune slide-coordinate widths.
     width: 1244
     height: 700
     # Keep the address bar in step with the current slide (see also

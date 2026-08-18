@@ -9,7 +9,7 @@ The drawing tools are open as soon as the deck starts. The compact rail keeps th
 
 Annotations are saved locally by each slide's explicit ID and survive reloads, reordering, or insertion of other slides. Use the panel's export/import buttons to move them to another browser or device. Exports also include a bounded, session-only interaction trace and device details for diagnosing input failures; nothing in that trace is sent or persisted by the app. Give every new slide a unique ID; Reveal fragment animations remain part of their containing slide, while uncounted replacement slides need their own IDs.
 
-The writing canvas is 16:9 so its visible left and right edges agree with Overview and PDF pages on modern widescreen displays. On screens with a different aspect ratio, a hairline and subtly shaded margins distinguish the space outside the target 16:9 canvas; those local guides are omitted from Overview and PDF output. Ink saved or exported by the earlier 16:10 version is automatically recentred once when it is first opened or imported.
+The writing canvas is 16:9 so its visible left and right edges agree with Overview and PDF pages on modern widescreen displays. On screens with a different aspect ratio, a hairline and subtly shaded margins distinguish the space outside the target 16:9 canvas; those local guides are omitted from Overview and PDF output.
 
 Choose **Save annotated PDF** in the options to open Reveal's print view with the saved pen and highlighter strokes overlaid. If ruled guides are enabled, their current spacing is included on every page. Use the browser's **Save as PDF** destination and enable **Background graphics** so highlighter colour and other slide backgrounds are retained.
 

@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  pressureSample, isIPad, strokeWidth, cycleValue, ownsPointer, ensureStrokeWidths, cloneStrokes,
-  slideKey, migrateInkKeys, reframeInk, repairOverscanCoordinates, nextItem
+  pressureSample, isIPad, cycleValue, ownsPointer, cloneStrokes,
+  slideKey, nextItem
 } = require('../annotate-model.js');
 
 test('recognises classic and desktop-mode iPads without classifying Macs', () => {
@@ -44,22 +44,6 @@ test('only the contact that began a gesture can move or finish it', () => {
   assert.equal(ownsPointer('touch:4', 'touch:4'), true);
 });
 
-test('legacy strokes capture their current tool width exactly once', () => {
-  const ink = {
-    '0.0': [
-      { t: 'pen', p: [[1, 2, 0.5]] },
-      { t: 'highlighter', w: 64, p: [[3, 4, 0.5]] }
-    ]
-  };
-  ensureStrokeWidths(ink, { pen: 12.4, highlighter: 86 });
-  assert.equal(ink['0.0'][0].w, 12.4);
-  assert.equal(ink['0.0'][1].w, 64);
-
-  ensureStrokeWidths(ink, { pen: 20, highlighter: 100 });
-  assert.equal(ink['0.0'][0].w, 12.4);
-  assert.equal(strokeWidth(ink['0.0'][1], { highlighter: 100 }), 64);
-});
-
 test('clipboard strokes are independent copies with an optional position offset', () => {
   const strokes = [{
     t: 'pen', c: '#252525', w: 12.4, s: false,
@@ -90,47 +74,6 @@ test('stable slide keys distinguish authored, generated, uncounted, and fragment
   assert.equal(slideKey(slide('worked-example'), { h: 6, v: 0 }), 'worked-example');
   assert.equal(slideKey(slide('worked-example'), { h: 6, v: 0 }), 'worked-example');
   assert.equal(slideKey(null, { h: 7, v: 2 }), '7.2');
-});
-
-test('index-keyed legacy ink migrates without losing distinct stable ink', () => {
-  const oldStroke = { t: 'pen', p: [[1, 2, 0.5]] };
-  const keptStroke = { t: 'pen', p: [[3, 4, 0.5]] };
-  const ink = {
-    '0.0': [oldStroke, keptStroke],
-    'scribble-slide-001': [keptStroke]
-  };
-
-  assert.equal(migrateInkKeys(ink, [
-    { stable: 'scribble-slide-001', legacy: '0.0' },
-    { stable: 'scribble-slide-002', legacy: '1.0' }
-  ]), true);
-  assert.equal(ink['0.0'], undefined);
-  assert.deepEqual(ink['scribble-slide-001'], [keptStroke, oldStroke]);
-});
-
-test('legacy 16:10 ink is centred in the wider 16:9 canvas without distortion', () => {
-  const ink = {
-    'scribble-slide-001': [{
-      t: 'pen', w: 12.4, p: [[-50, 100, 0.3], [1170, 650, 0.8]]
-    }]
-  };
-  assert.equal(reframeInk(ink, { width: 1120, height: 700 }, { width: 1244, height: 700 }), true);
-  assert.deepEqual(ink['scribble-slide-001'][0].p, [[12, 100, 0.3], [1232, 650, 0.8]]);
-  assert.equal(ink['scribble-slide-001'][0].w, 12.4);
-  assert.equal(reframeInk(ink, { width: 1244, height: 700 }, { width: 1244, height: 700 }), false);
-});
-
-test('Safari overscan coordinates are repaired independently on each axis', () => {
-  const ink = {
-    first: [{ t: 'pen', p: [[2488, 1400, 0.4], [6220, 3500, 0.8]] }],
-    continued: [{ t: 'pen', p: [[3110, 64, 0.5], [4976, 700, 0.5]] }],
-    ordinary: [{ t: 'pen', p: [[100, 200, 0.5], [1100, 600, 0.5]] }]
-  };
-  assert.equal(repairOverscanCoordinates(ink, { width: 1244, height: 700 }), true);
-  assert.deepEqual(ink.first[0].p, [[0, 0, 0.4], [1244, 700, 0.8]]);
-  assert.deepEqual(ink.continued[0].p, [[207.3, 64, 0.5], [829.3, 700, 0.5]]);
-  assert.deepEqual(ink.ordinary[0].p, [[100, 200, 0.5], [1100, 600, 0.5]]);
-  assert.equal(repairOverscanCoordinates(ink, { width: 1244, height: 700 }), false);
 });
 
 test('next-slide lookup follows reveal order and stops at the final slide', () => {

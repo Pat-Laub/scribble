@@ -32,11 +32,9 @@
     ['Green', '#0f9d58'], ['Orange', '#e8710a']
   ];
 
-  // How wide each tool draws, in slide coordinates. The ../scribble deck's own
-  // widths are these divided by 3.2: its proportions were right — both tools
-  // wanted the same step up — but its weights were set for a tablet held in the
-  // hand, and these were set by eye for the deck as it is presented.
-  var WIDTHS = { pen: 12.4, highlighter: 86 };
+  // How wide each tool draws, in slide coordinates. These defaults are tuned
+  // for handwriting at the deck's corrected, browser-independent scale.
+  var WIDTHS = { pen: 4.1, highlighter: 28.7 };
 
   // The rest of what perfect-freehand needs, which is what gives a stroke its
   // shape rather than its weight: how far pressure narrows it, how much the
@@ -65,7 +63,7 @@
   // than as a multiple, so that changing the defaults above never compounds
   // with a choice already made — for every deck on the device.
   var NIB = { min: 0.25, max: 3, step: 1.25 };
-  var WIDTH_STORE = 'reveal-ink-width';
+  var WIDTH_STORE = 'reveal-ink-width-v2';
 
   // Black ink is black, but a black *highlighter* is a grey smear over the
   // words it is meant to pick out. The first swatch draws — and shows itself
@@ -102,9 +100,7 @@
     tolerance: 2    // simplification tolerance; ink is sampled far finer than needed
   };
   var SVG_NS = 'http://www.w3.org/2000/svg';
-  var STORE = 'reveal-ink:' + location.pathname;
-  var CANVAS_STORE = 'reveal-ink-canvas:' + location.pathname;
-  var LEGACY_CANVAS = { width: 1120, height: 700 };
+  var STORE = 'reveal-ink-v2:' + location.pathname;
   var PRINT = /(?:^|[?&])print-pdf(?:[=&]|$)/i.test(location.search);
   var PRINT_INK = PRINT && /(?:^|[?&])ink(?:[=&]|$)/i.test(location.search);
   var RULE_STORE = 'reveal-ink-rules';
@@ -120,16 +116,15 @@
 
   // A stroke is { t: tool, c: colour, w: width, s: simulate-pressure,
   // p: [[x, y, pressure], ...] }. Everything that affects rendering travels
-  // with the stroke, so a viewer needs no copy of the presenter's tool state.
+  // with the stroke, so rendering needs no copy of the current tool state.
   var widths = readWidths(); // active presets for the next stroke of each tool
-  var ink = AnnotationModel.ensureStrokeWidths(read(), widths);
-  var savedCanvas = readCanvas(); // absent means the original 1120x700 frame
+  var ink = read();
   var undos = {}, redos = {};// { slideKey: [JSON snapshot, ...] }
   var tool = 'pen';          // this deck opens ready to write
   var lastTool = 'pen';      // restored after temporarily hiding the tools
   var hidden = false;        // the ink is parked, showing the slide underneath
   var ruled = readRules();    // local view preference; never part of shared ink
-  var ruleSpacing = readRuleSpacing(); // presenter-local guide density
+  var ruleSpacing = readRuleSpacing(); // browser-local guide density
   var pressureEnabled = readPressure(); // captured into each new stroke's points
   var colour = COLOURS[0][1];
   var moreOpen = false;       // session controls expand beside the writing rail
@@ -169,7 +164,7 @@
     var o = TOOLS[stroke.t];
     if (stroke.s && o.simulated) o = o.simulated;
     var pts = getStroke(stroke.p, {
-      size: AnnotationModel.strokeWidth(stroke, widths) * (o.share || 1),
+      size: stroke.w * (o.share || 1),
       thinning: o.thinning, smoothing: o.smoothing,
       streamline: o.streamline, easing: o.easing,
       simulatePressure: stroke.s, last: !unfinished
@@ -199,7 +194,7 @@
   }
 
   function touches(stroke, x, y) {
-    var r = ERASER + AnnotationModel.strokeWidth(stroke, widths) / 2, p = stroke.p;
+    var r = ERASER + stroke.w / 2, p = stroke.p;
     for (var i = 0; i < p.length; i++) {
       if (segDist(x, y, p[i], p[i + 1] || p[i]) <= r) return true;
     }
@@ -321,17 +316,6 @@
     return slideKeyFor(Reveal.getCurrentSlide());
   }
 
-  function migrateSlideKeys() {
-    var mappings = Reveal.getSlides().map(function (slide) {
-      var indices = Reveal.getIndices(slide);
-      return {
-        stable: AnnotationModel.slideKey(slide, indices),
-        legacy: indices.h + '.' + indices.v
-      };
-    });
-    return AnnotationModel.migrateInkKeys(ink, mappings);
-  }
-
   function strokes() { return ink[slideKey()] || []; }
 
   // Call before every change: records the state to come back to, and drops the
@@ -383,42 +367,6 @@
 
   function read() {
     try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch (e) { return {}; }
-  }
-
-  function readCanvas() {
-    try {
-      var value = JSON.parse(localStorage.getItem(CANVAS_STORE));
-      return value && value.width > 0 && value.height > 0 ? value : null;
-    } catch (e) { return null; }
-  }
-
-  // Canvas metadata prevents a widened deck from shifting the same strokes on
-  // every reload. Files exported before metadata existed are known to use the
-  // original 1120x700 frame and follow this same one-time migration.
-  function migrateCanvasInk(source) {
-    var target = { width: W, height: H };
-    var changed = AnnotationModel.reframeInk(ink, source || savedCanvas || LEGACY_CANVAS, target);
-    savedCanvas = target;
-    try {
-      // Store transformed points before advancing their frame marker. This is
-      // intentionally immediate (rather than save()'s drawing debounce), so a
-      // directly opened print window cannot record the new frame but leave old
-      // coordinates behind if it is closed straight after printing.
-      if (changed) localStorage.setItem(STORE, JSON.stringify(kept()));
-      localStorage.setItem(CANVAS_STORE, JSON.stringify(target));
-    } catch (e) { /* full or blocked */ }
-    return changed;
-  }
-
-  // Repair ink captured through WebKit's incorrect bounding box for the old
-  // negative-inset SVG layers. This is geometry-based and idempotent, so it
-  // also repairs a Safari export when it is imported in another browser.
-  function repairOverscanInk() {
-    var changed = AnnotationModel.repairOverscanCoordinates(ink, { width: W, height: H });
-    if (changed) {
-      try { localStorage.setItem(STORE, JSON.stringify(kept())); } catch (e) { /* full or blocked */ }
-    }
-    return changed;
   }
 
   function readWidths() {
@@ -496,7 +444,6 @@
     saveTimer = setTimeout(function () {
       try {
         localStorage.setItem(STORE, JSON.stringify(kept()));
-        localStorage.setItem(CANVAS_STORE, JSON.stringify({ width: W, height: H }));
       } catch (e) { /* full or blocked */ }
     }, 400);
   }
@@ -565,7 +512,7 @@
     var name = (location.pathname.split('/').pop() || 'slides').replace(/\.html?$/, '');
     var payload = {
       format: 'scribble-ink',
-      version: 4,
+      version: 5,
       canvas: { width: W, height: H },
       ink: kept(),
       diagnostics: diagnosticReport()
@@ -584,15 +531,12 @@
     reader.onload = function () {
       var data;
       try { data = JSON.parse(reader.result); } catch (e) { return; }
-      if (!data || typeof data !== 'object') return;
-      // Version 1 exports were the ink object itself. Versions 2-3 wrap it so
-      // a support trace can travel with the ink; version 4 also records the
-      // canvas frame used by its coordinates.
-      var imported = data.format === 'scribble-ink' && data.ink ? data.ink : data;
-      ink = AnnotationModel.ensureStrokeWidths(imported, widths);
-      migrateCanvasInk(data.format === 'scribble-ink' && data.canvas ? data.canvas : LEGACY_CANVAS);
-      repairOverscanInk();
-      migrateSlideKeys();
+      if (!data || data.format !== 'scribble-ink' || data.version !== 5 ||
+          !data.ink || typeof data.ink !== 'object') {
+        alert('This annotation file uses an unsupported format.');
+        return;
+      }
+      ink = data.ink;
       undos = {};  // the ink these described is not the ink that is here now
       redos = {};
       clipboard = null;
@@ -622,8 +566,6 @@
     W = parseFloat(cfg.width) || 960;
     H = parseFloat(cfg.height) || 700;
     view = [-OVERSCAN * W, -OVERSCAN * H, (1 + 2 * OVERSCAN) * W, (1 + 2 * OVERSCAN) * H];
-    migrateCanvasInk();
-    repairOverscanInk();
     var finished = false;
     function layOut() {
       if (finished) return true;
@@ -1003,7 +945,7 @@
           originals: selected.map(function (s) {
             return s.p.map(function (q) { return q.slice(); });
           }),
-          widths: selected.map(function (s) { return AnnotationModel.strokeWidth(s, widths); })
+          widths: selected.map(function (s) { return s.w; })
         };
       } else if (selected.length && AnnotationGeometry.insideBounds(p, box, ERASER)) {
         snapshot();
@@ -1717,14 +1659,8 @@
     W = parseFloat(cfg.width) || 960;
     H = parseFloat(cfg.height) || 700;
     view = [-OVERSCAN * W, -OVERSCAN * H, (1 + 2 * OVERSCAN) * W, (1 + 2 * OVERSCAN) * H];
-    migrateCanvasInk();
-    repairOverscanInk();
-    migrateSlideKeys();
     build();
     render();
-    // Persist any legacy strokes that were assigned their current width during
-    // startup, before a later preset change could give them a different one.
-    save();
 
     Reveal.on('slidechanged', function () {
       render();

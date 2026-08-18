@@ -47,6 +47,17 @@ $ink-button-size: 34px !default;
     mix-blend-mode: multiply;
   }
 
+  &.ink-text {
+    text {
+      font-family: system-ui, sans-serif;
+      font-weight: 400;
+      paint-order: stroke;
+      stroke: rgba(255, 255, 255, 0.75);
+      stroke-width: 1px;
+      stroke-linejoin: round;
+    }
+  }
+
   // Ink that is about to go — passed over by the eraser, or crossed by a
   // scribble — shown faded until the tool is lifted and it actually goes.
   .ink-fading {
@@ -183,6 +194,29 @@ $ink-button-size: 34px !default;
   &.drawing.ink-hover {
     cursor: crosshair;
   }
+
+  &.drawing.ink-text-mode,
+  &.drawing.ink-text-mode.ink-hover {
+    cursor: text;
+  }
+}
+
+// The only live HTML in a text annotation. It is fixed to the rendered slide
+// rectangle while editing, then replaced by inert SVG text on commit.
+.ink-text-editor {
+  position: fixed;
+  z-index: 60;
+  box-sizing: border-box;
+  margin: 0;
+  border: 2px solid rgba(38, 104, 199, 0.8);
+  border-radius: 6px;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  resize: none;
+  overflow: hidden;
+  font-family: system-ui, sans-serif;
+  font-weight: 400;
 }
 
 .reveal .ink-panel {
@@ -425,7 +459,8 @@ $ink-button-size: 34px !default;
   .ink-layer,
   .ink-overview-layer,
   .ink-selection-layer,
-  .ink-surface {
+  .ink-surface,
+  .ink-text-editor {
     display: none !important;
   }
 }
@@ -435,7 +470,8 @@ $ink-button-size: 34px !default;
   .ink-guide,
   .ink-layer,
   .ink-selection-layer,
-  .ink-surface {
+  .ink-surface,
+  .ink-text-editor {
     display: none !important;
   }
 }
@@ -498,7 +534,8 @@ $ink-button-size: 34px !default;
   .ink-layer,
   .ink-overview-layer,
   .ink-selection-layer,
-  .ink-surface {
+  .ink-surface,
+  .ink-text-editor {
     display: none !important;
   }
 

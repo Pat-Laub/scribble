@@ -80,6 +80,52 @@
     return commands.join('\n');
   }
 
+  var WIN_ANSI = {
+    0x20ac: 128, 0x201a: 130, 0x0192: 131, 0x201e: 132, 0x2026: 133,
+    0x2020: 134, 0x2021: 135, 0x02c6: 136, 0x2030: 137, 0x0160: 138,
+    0x2039: 139, 0x0152: 140, 0x017d: 142, 0x2018: 145, 0x2019: 146,
+    0x201c: 147, 0x201d: 148, 0x2022: 149, 0x2013: 150, 0x2014: 151,
+    0x02dc: 152, 0x2122: 153, 0x0161: 154, 0x203a: 155, 0x0153: 156,
+    0x017e: 158, 0x0178: 159
+  };
+
+  // Core PDF Helvetica uses WinAnsi. Keep the PDF itself ASCII by writing
+  // non-ASCII bytes as octal escapes, and substitute only characters that the
+  // standard font genuinely cannot represent.
+  function pdfString(value) {
+    var out = '';
+    Array.from(String(value || '')).forEach(function (character) {
+      var code = character.codePointAt(0), byte = code;
+      if (WIN_ANSI[code] !== undefined) byte = WIN_ANSI[code];
+      else if (code > 255) byte = 63;
+      if (byte === 40 || byte === 41 || byte === 92) out += '\\' + String.fromCharCode(byte);
+      else if (byte < 32 || byte > 126) out += '\\' + byte.toString(8).padStart(3, '0');
+      else out += String.fromCharCode(byte);
+    });
+    return '(' + out + ')';
+  }
+
+  function transformedText(items, scale, pageHeight) {
+    var commands = [];
+    (items || []).forEach(function (item) {
+      var size = Number(item.fontSize) || 32;
+      var lineHeight = Number(item.lineHeight) || size * 1.25;
+      var padding = Number(item.padding) || size * 0.16;
+      var x = (Number(item.x) + padding) * scale;
+      var y = pageHeight - (Number(item.y) + padding + size) * scale;
+      commands.push('BT');
+      commands.push('/F1 ' + number(size * scale) + ' Tf');
+      commands.push(colour(item.colour) + ' rg');
+      commands.push(number(x) + ' ' + number(y) + ' Td');
+      (item.lines || ['']).forEach(function (line, index) {
+        if (index) commands.push('0 ' + number(-lineHeight * scale) + ' Td');
+        commands.push(pdfString(line) + ' Tj');
+      });
+      commands.push('ET');
+    });
+    return commands.join('\n');
+  }
+
   function stream(dictionary, contents) {
     return '<< ' + dictionary + ' /Length ' + contents.length + ' >>\nstream\n' +
       contents + '\nendstream';
@@ -108,6 +154,7 @@
     var catalogRef = reserve();
     var pagesRef = reserve();
     var highlighterStateRef = reserve();
+    var fontRef = reserve();
     var records = pages.map(function (page) {
       var strokes = page.strokes || [];
       var highlighters = strokes.filter(function (stroke) { return stroke.tool === 'highlighter' && stroke.path; });
@@ -116,7 +163,8 @@
         content: reserve(),
         form: highlighters.length ? reserve() : null,
         pens: strokes.filter(function (stroke) { return stroke.tool === 'pen' && stroke.path; }),
-        highlighters: highlighters
+        highlighters: highlighters,
+        text: page.text || []
       };
     });
 
@@ -125,6 +173,8 @@
       records.map(function (record) { return record.page + ' 0 R'; }).join(' ') + '] >>';
     objects[highlighterStateRef] =
       '<< /Type /ExtGState /ca 0.4 /CA 0.4 /BM /Multiply >>';
+    objects[fontRef] =
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
 
     records.forEach(function (record, index) {
       var resourceParts = [];
@@ -132,6 +182,7 @@
         resourceParts.push('/ExtGState << /HL ' + highlighterStateRef + ' 0 R >>');
         resourceParts.push('/XObject << /H' + index + ' ' + record.form + ' 0 R >>');
       }
+      if (record.text.length) resourceParts.push('/Font << /F1 ' + fontRef + ' 0 R >>');
       objects[record.page] = '<< /Type /Page /Parent ' + pagesRef + ' 0 R' +
         ' /MediaBox [0 0 ' + number(pageWidth) + ' ' + number(pageHeight) + ']' +
         ' /Resources << ' + resourceParts.join(' ') + ' >>' +
@@ -151,6 +202,7 @@
       }
       if (record.form) content.push('q /HL gs /H' + index + ' Do Q');
       if (record.pens.length) content.push(transformedPaths(record.pens, scale, pageHeight));
+      if (record.text.length) content.push(transformedText(record.text, scale, pageHeight));
       objects[record.content] = stream('', content.join('\n'));
 
       if (record.form) {
@@ -182,5 +234,5 @@
     return bytes(body);
   }
 
-  return { create: create, quadraticPathToPdf: quadraticPathToPdf };
+  return { create: create, quadraticPathToPdf: quadraticPathToPdf, pdfString: pdfString };
 });

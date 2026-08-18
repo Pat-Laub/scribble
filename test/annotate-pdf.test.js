@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { create, quadraticPathToPdf } = require('../annotate-pdf.js');
+const { create, quadraticPathToPdf, pdfString } = require('../annotate-pdf.js');
 
 test('quadratic freehand paths become exact cubic PDF paths', () => {
   assert.equal(
@@ -8,6 +8,11 @@ test('quadratic freehand paths become exact cubic PDF paths', () => {
     '0 0 m\n2 4 4 4 6 0 c\n8 -4 10 -4 12 0 c\nh'
   );
   assert.throws(() => quadraticPathToPdf('M 0 0 Q 3 6'), /Invalid SVG path data/);
+});
+
+test('PDF text escapes punctuation and common WinAnsi characters safely', () => {
+  assert.equal(pdfString('Cost (net) \\ “high”'), '(Cost \\(net\\) \\\\ \\223high\\224)');
+  assert.equal(pdfString('unsupported π'), '(unsupported ?)');
 });
 
 test('direct PDF output has widescreen pages, ruled guides and vector ink', () => {
@@ -20,7 +25,10 @@ test('direct PDF output has widescreen pages, ruled guides and vector ink', () =
       { strokes: [
         { tool: 'highlighter', colour: '#facc15', path: 'M 10 20 Q 20 30 30 20 Z' },
         { tool: 'pen', colour: '#2668c7', path: 'M 100 200 Q 110 210 120 200 Z' }
-      ] },
+      ], text: [{
+        x: 80, y: 100, fontSize: 32, lineHeight: 40, padding: 5,
+        colour: '#252525', lines: ['First line', 'Second line']
+      }] },
       { strokes: [] }
     ]
   });
@@ -29,6 +37,9 @@ test('direct PDF output has widescreen pages, ruled guides and vector ink', () =
   assert.match(text, /\/Count 2/);
   assert.match(text, /\/MediaBox \[0 0 959\.6571 540\]/);
   assert.match(text, /\/BM \/Multiply/);
+  assert.match(text, /\/BaseFont \/Helvetica/);
+  assert.match(text, /\(First line\) Tj/);
+  assert.match(text, /\(Second line\) Tj/);
   assert.match(text, /64 64 m 1180 64 l S/);
   assert.match(text, /0\.149 0\.4078 0\.7804 rg/);
   assert.match(text, /%%EOF\n$/);

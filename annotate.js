@@ -111,12 +111,13 @@
   // width, while retaining useful room on either side for pressure variation.
   var PRESSURE = { enabledByDefault: true, baseline: 0.35, scale: 0.75 };
   var RULES = { spacing: 52, min: 28, max: 92, step: 8, margin: 64 };
+  var TEXT = { size: 34, width: 360, lineHeight: 1.25, padding: 0.16 };
 
   /* -------------------------------- state -------------------------------- */
 
-  // A stroke is { t: tool, c: colour, w: width, s: simulate-pressure,
-  // p: [[x, y, pressure], ...] }. Everything that affects rendering travels
-  // with the stroke, so rendering needs no copy of the current tool state.
+  // Ink is either a pressure-shaped stroke, or a text box with { t: 'text',
+  // c: colour, f: font size, v: value, p: four box corners }. Everything that
+  // affects rendering travels with the annotation.
   var widths = readWidths(); // active presets for the next stroke of each tool
   var ink = read();
   var undos = {}, redos = {};// { slideKey: [JSON snapshot, ...] }
@@ -138,10 +139,11 @@
   var lasso = null;          // { p, el } while a selection loop is being drawn
   var moving = null;         // original points while selected strokes are dragged
   var resizing = null;       // fixed corner and originals while selection scales
+  var editing = null;        // in-place textarea and its uncommitted text-box draft
   var clipboard = null;      // copied strokes survive slide changes for this session
-  var nodes = new WeakMap(); // stroke -> its <path>, for the fade preview
+  var nodes = new WeakMap(); // annotation -> its SVG element
   var thinned = new WeakMap();// stroke -> its simplified points
-  var layers = {};           // one SVG per drawing tool; see build()
+  var layers = {};           // one SVG per rendered annotation type; see build()
   var view;                  // every layer's viewBox, in slide coordinates
   // On an iPad this deck assumes an Apple Pencil is available, so fingers are
   // navigation/palm input from the first touch. Elsewhere, touch and mouse can
@@ -185,6 +187,95 @@
     return el;
   }
 
+  function isText(annotation) { return annotation && annotation.t === 'text'; }
+
+  function boxPoints(x, y, width, height) {
+    return [[x, y], [x + width, y], [x + width, y + height], [x, y + height]];
+  }
+
+  function itemBox(annotation) {
+    return AnnotationGeometry.pointsBounds(annotation && annotation.p || []);
+  }
+
+  var measureCanvas, measureContext;
+  function measureText(value, size) {
+    if (!measureCanvas) {
+      measureCanvas = document.createElement('canvas');
+      measureContext = measureCanvas.getContext('2d');
+    }
+    measureContext.font = size + 'px system-ui, sans-serif';
+    return measureContext.measureText(value).width;
+  }
+
+  function textLines(annotation) {
+    var box = itemBox(annotation);
+    var padding = annotation.f * TEXT.padding;
+    var available = Math.max(annotation.f, (box ? box[2] - box[0] : TEXT.width) - 2 * padding);
+    var lines = [];
+    String(annotation.v || '').split('\n').forEach(function (paragraph) {
+      if (!paragraph) { lines.push(''); return; }
+      var line = '';
+      paragraph.split(/\s+/).forEach(function (word) {
+        var candidate = line ? line + ' ' + word : word;
+        if (line && measureText(candidate, annotation.f) > available) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = candidate;
+        }
+      });
+      lines.push(line);
+    });
+    return lines.length ? lines : [''];
+  }
+
+  function fitTextBox(annotation) {
+    var box = itemBox(annotation);
+    var x = box ? box[0] : 0, y = box ? box[1] : 0;
+    var width = box ? box[2] - box[0] : TEXT.width;
+    var padding = annotation.f * TEXT.padding;
+    var height = textLines(annotation).length * annotation.f * TEXT.lineHeight + 2 * padding;
+    annotation.p = boxPoints(x, y, width, height);
+  }
+
+  function textFor(annotation) {
+    var box = itemBox(annotation), padding = annotation.f * TEXT.padding;
+    var group = document.createElementNS(SVG_NS, 'g');
+    group.setAttribute('class', 'ink-text-item');
+    group.setAttribute('aria-label', annotation.v || 'Text box');
+    var text = document.createElementNS(SVG_NS, 'text');
+    text.setAttribute('x', box[0] + padding);
+    text.setAttribute('y', box[1] + padding + annotation.f);
+    text.setAttribute('fill', annotation.c);
+    text.setAttribute('font-size', annotation.f);
+    text.setAttribute('font-family', 'system-ui, sans-serif');
+    textLines(annotation).forEach(function (line, index) {
+      var span = document.createElementNS(SVG_NS, 'tspan');
+      span.setAttribute('x', box[0] + padding);
+      if (index) span.setAttribute('dy', annotation.f * TEXT.lineHeight);
+      span.textContent = line || '\u00a0';
+      text.appendChild(span);
+    });
+    group.appendChild(text);
+    return group;
+  }
+
+  function elementFor(annotation, unfinished) {
+    return isText(annotation) ? textFor(annotation) : pathFor(annotation, unfinished);
+  }
+
+  function updateElement(annotation) {
+    var old = nodes.get(annotation);
+    if (!old) return;
+    if (isText(annotation)) {
+      var replacement = textFor(annotation);
+      old.replaceWith(replacement);
+      nodes.set(annotation, replacement);
+    } else {
+      old.setAttribute('d', pathData(annotation));
+    }
+  }
+
   // Distance from (x, y) to the segment a–b: erasing tests segments, not just
   // points, so a fast (and therefore sparsely sampled) stroke is still hit.
   function segDist(x, y, a, b) {
@@ -194,6 +285,7 @@
   }
 
   function touches(stroke, x, y) {
+    if (isText(stroke)) return AnnotationGeometry.insideBounds([x, y], itemBox(stroke), ERASER);
     var r = ERASER + stroke.w / 2, p = stroke.p;
     for (var i = 0; i < p.length; i++) {
       if (segDist(x, y, p[i], p[i + 1] || p[i]) <= r) return true;
@@ -523,7 +615,7 @@
     var name = (location.pathname.split('/').pop() || 'slides').replace(/\.html?$/, '');
     var payload = {
       format: 'scribble-ink',
-      version: 5,
+      version: 6,
       canvas: { width: W, height: H },
       ink: kept(),
       diagnostics: diagnosticReport()
@@ -539,7 +631,7 @@
     reader.onload = function () {
       var data;
       try { data = JSON.parse(reader.result); } catch (e) { return; }
-      if (!data || data.format !== 'scribble-ink' || data.version !== 5 ||
+      if (!data || data.format !== 'scribble-ink' || data.version !== 6 ||
           !data.ink || typeof data.ink !== 'object') {
         alert('This annotation file uses an unsupported format.');
         return;
@@ -582,9 +674,19 @@
     if (!window.AnnotationPdf) return printPdf();
     try {
       var pages = printableSlides().map(function (slide) {
+        var list = ink[AnnotationModel.slideKey(slide)] || [];
         return {
-          strokes: (ink[AnnotationModel.slideKey(slide)] || []).map(function (stroke) {
+          strokes: list.filter(function (annotation) { return !isText(annotation); }).map(function (stroke) {
             return { tool: stroke.t, colour: stroke.c, path: pathData(stroke) };
+          }),
+          text: list.filter(isText).map(function (annotation) {
+            var box = itemBox(annotation);
+            return {
+              x: box[0], y: box[1], fontSize: annotation.f,
+              lineHeight: annotation.f * TEXT.lineHeight,
+              padding: annotation.f * TEXT.padding,
+              colour: annotation.c, lines: textLines(annotation)
+            };
           })
         };
       });
@@ -682,6 +784,18 @@
       drawn.forEach(function (stroke) { layer.appendChild(pathFor(stroke)); });
       page.appendChild(layer);
     });
+    var text = list.filter(isText);
+    if (text.length) {
+      var textLayer = document.createElementNS(SVG_NS, 'svg');
+      textLayer.setAttribute('class', 'ink-print ink-text');
+      textLayer.setAttribute('viewBox', view.join(' '));
+      textLayer.style.cssText = 'position:absolute' +
+        ';left:' + (left - OVERSCAN * W * scale) + 'px' +
+        ';top:' + (top - OVERSCAN * H * scale) + 'px' +
+        ';width:' + (view[2] * scale) + 'px;height:' + (view[3] * scale) + 'px';
+      text.forEach(function (annotation) { textLayer.appendChild(textFor(annotation)); });
+      page.appendChild(textLayer);
+    }
     return list.length > 0;
   }
 
@@ -718,6 +832,104 @@
     buttons[0].addEventListener('click', function () { window.print(); });
     buttons[1].addEventListener('click', function () { window.close(); });
     document.body.appendChild(el);
+  }
+
+  /* ----------------------------- text boxes ----------------------------- */
+
+  function textAt(point) {
+    for (var i = strokes().length - 1; i >= 0; i--) {
+      var annotation = strokes()[i];
+      if (isText(annotation) && AnnotationGeometry.insideBounds(point, itemBox(annotation), 0)) {
+        return annotation;
+      }
+    }
+    return null;
+  }
+
+  function layoutTextEditor() {
+    if (!editing) return;
+    var slideRect = slides.getBoundingClientRect();
+    var box = itemBox(editing.draft);
+    var sx = slideRect.width / W, sy = slideRect.height / H;
+    var padding = editing.draft.f * TEXT.padding;
+    editing.el.style.left = (slideRect.left + box[0] * sx) + 'px';
+    editing.el.style.top = (slideRect.top + box[1] * sy) + 'px';
+    editing.el.style.width = Math.max(80, (box[2] - box[0]) * sx) + 'px';
+    editing.el.style.height = Math.max(38, (box[3] - box[1]) * sy) + 'px';
+    editing.el.style.padding = (padding * sy) + 'px ' + (padding * sx) + 'px';
+    editing.el.style.fontSize = (editing.draft.f * sy) + 'px';
+    editing.el.style.lineHeight = String(TEXT.lineHeight);
+    editing.el.style.color = editing.draft.c;
+  }
+
+  function finishText(commit) {
+    if (!editing) return;
+    var session = editing;
+    editing = null;
+    window.removeEventListener('resize', layoutTextEditor);
+    session.el.remove();
+    if (!commit) { sync(); return; }
+
+    var value = session.draft.v;
+    var changed = session.target
+      ? JSON.stringify(session.target) !== JSON.stringify(session.draft)
+      : !!value.trim();
+    if (!changed) { sync(); return; }
+
+    snapshot(session.key);
+    if (!value.trim()) {
+      ink[session.key] = (ink[session.key] || []).filter(function (item) {
+        return item !== session.target;
+      });
+    } else if (session.target) {
+      session.target.c = session.draft.c;
+      session.target.f = session.draft.f;
+      session.target.v = session.draft.v;
+      session.target.p = session.draft.p;
+    } else {
+      (ink[session.key] = ink[session.key] || []).push(session.draft);
+    }
+    render();
+    save();
+  }
+
+  function editText(point) {
+    finishText(true);
+    var target = textAt(point);
+    var draft = target ? JSON.parse(JSON.stringify(target)) : {
+      t: 'text', c: colour, f: TEXT.size, v: '',
+      p: boxPoints(Math.min(point[0], W - TEXT.width), point[1], TEXT.width, TEXT.size * 1.6)
+    };
+    fitTextBox(draft);
+    var textarea = document.createElement('textarea');
+    textarea.className = 'ink-text-editor';
+    textarea.value = draft.v;
+    textarea.placeholder = 'Type text';
+    textarea.setAttribute('aria-label', target ? 'Edit text box' : 'New text box');
+    textarea.spellcheck = true;
+    document.body.appendChild(textarea);
+    editing = { key: slideKey(), target: target, draft: draft, el: textarea };
+    layoutTextEditor();
+    window.addEventListener('resize', layoutTextEditor);
+    textarea.addEventListener('input', function () {
+      if (!editing || editing.el !== textarea) return;
+      editing.draft.v = textarea.value;
+      fitTextBox(editing.draft);
+      layoutTextEditor();
+    });
+    textarea.addEventListener('keydown', function (event) {
+      event.stopPropagation();
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        finishText(false);
+      } else if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        event.preventDefault();
+        finishText(true);
+      }
+    });
+    textarea.addEventListener('blur', function () { finishText(true); });
+    try { textarea.focus({ preventScroll: true }); } catch (error) { textarea.focus(); }
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
   }
 
   /* ------------------------------- drawing ------------------------------- */
@@ -923,7 +1135,7 @@
   // inside the deck — including a link in the middle of a paragraph — is
   // something to draw on, exactly as it was when a box over the slide took the
   // input and covered them all.
-  var CHROME = '.ink-panel, .ink-launchers, .controls, .progress, .slide-number,' +
+  var CHROME = '.ink-panel, .ink-launchers, .ink-text-editor, .controls, .progress, .slide-number,' +
     '.slide-menu, .slide-menu-button, .slide-menu-overlay, .speaker-controls';
 
   function ours(e) {
@@ -986,6 +1198,12 @@
     // rest of it: every point is then read the same way.
     stylus = isStylus(e);
     var p = at(e);
+    if (tool === 'text') {
+      activePointer = null;
+      editText(p);
+      sync();
+      return;
+    }
     if (tool === 'select') {
       var box = selectedBounds();
       var handle = selected.length && AnnotationGeometry.resizeHandle(p, box, RESIZE_HANDLE);
@@ -1000,7 +1218,8 @@
           originals: selected.map(function (s) {
             return s.p.map(function (q) { return q.slice(); });
           }),
-          widths: selected.map(function (s) { return s.w; })
+          widths: selected.map(function (s) { return s.w; }),
+          fonts: selected.map(function (s) { return s.f; })
         };
       } else if (selected.length && AnnotationGeometry.insideBounds(p, box, ERASER)) {
         snapshot();
@@ -1068,9 +1287,8 @@
       var here = at(e), dx = here[0] - moving.start[0], dy = here[1] - moving.start[1];
       selected.forEach(function (s, i) {
         s.p = AnnotationGeometry.translatePoints(moving.originals[i], dx, dy);
-        thinned.delete(s);
-        var el = nodes.get(s);
-        if (el) el.setAttribute('d', pathData(s));
+        if (!isText(s)) thinned.delete(s);
+        updateElement(s);
       });
       showSelection();
       return;
@@ -1081,10 +1299,10 @@
         resizing.anchor, resizing.corner, dragged, 0.1);
       selected.forEach(function (s, i) {
         s.p = AnnotationGeometry.scalePoints(resizing.originals[i], resizing.anchor, scale);
-        s.w = resizing.widths[i] * scale;
-        thinned.delete(s);
-        var el = nodes.get(s);
-        if (el) el.setAttribute('d', pathData(s));
+        if (isText(s)) s.f = resizing.fonts[i] * scale;
+        else s.w = resizing.widths[i] * scale;
+        if (!isText(s)) thinned.delete(s);
+        updateElement(s);
       });
       showSelection();
       return;
@@ -1261,6 +1479,7 @@
   var ICONS = {
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
     pen: '<path d="M4 20l3.6-1L19.3 7.3a1.8 1.8 0 0 0 0-2.5l-1.1-1.1a1.8 1.8 0 0 0-2.5 0L4 15.4z"/><path d="M14.9 5.6l3.5 3.5"/>',
+    text: '<path d="M5 5h14M12 5v14M8 19h8"/>',
     highlighter: '<path d="M6.5 14.5l6-9.5 5.5 3.7-6.2 9.8H7.6z"/><path d="M4 21h16"/>',
     eraser: '<path d="M15.6 4.4l4 4a1.6 1.6 0 0 1 0 2.2l-7.5 7.5a1.6 1.6 0 0 1-2.2 0l-4-4a1.6 1.6 0 0 1 0-2.2l7.5-7.5a1.6 1.6 0 0 1 2.2 0z"/><path d="M9 20h11"/>',
     select: '<path d="M5.2 6.4c2.5-3 9.8-3 12.8.2 3.5 3.7.8 9.9-4.7 11.7-5.6 1.8-10.4-1.3-9.1-5.8.8-2.7 4.4-4.2 8.1-3.4" stroke-dasharray="2.5 2.5"/><path d="M16.5 16.5l3.5 3.5"/>',
@@ -1332,6 +1551,7 @@
   }
 
   function open(on) {
+    if (!on && editing) finishText(true);
     if (tool) lastTool = tool;
     tool = on ? lastTool : null;
     if (!on) moreOpen = false;
@@ -1344,6 +1564,7 @@
   // while it is away — a stroke you cannot see is no use — and V brings back
   // the ink, the panel and the tool that was in hand, all where they were.
   function hide(on) {
+    if (on && editing) finishText(true);
     hidden = on;
     if (on) moreOpen = false;
     sync();
@@ -1360,14 +1581,14 @@
   // reconciling them; only the in-progress stroke is updated incrementally.
   function render() {
     clearSelection();
-    var paths = { pen: [], highlighter: [] };
+    var elements = { pen: [], highlighter: [], text: [] };
     strokes().forEach(function (s) {
-      var el = pathFor(s);
-      nodes.set(s, el);  // so a scribble can fade the strokes it is taking
-      paths[s.t].push(el);
+      var el = elementFor(s);
+      nodes.set(s, el);
+      if (elements[s.t]) elements[s.t].push(el);
     });
     Object.keys(layers).forEach(function (t) {
-      layers[t].replaceChildren.apply(layers[t], paths[t]);
+      layers[t].replaceChildren.apply(layers[t], elements[t]);
     });
     live = null;
     sync();
@@ -1407,6 +1628,11 @@
         var layer = overviewLayer(slide, 'ink-overview-' + t);
         drawn.forEach(function (stroke) { layer.appendChild(pathFor(stroke)); });
       });
+      var text = list.filter(isText);
+      if (text.length) {
+        var textLayer = overviewLayer(slide, 'ink-overview-text');
+        text.forEach(function (annotation) { textLayer.appendChild(textFor(annotation)); });
+      }
     });
   }
 
@@ -1414,6 +1640,7 @@
     var key = slideKey(), on = !!tool && !hidden;
     panel.classList.toggle('active', on);
     surface.classList.toggle('drawing', on);
+    surface.classList.toggle('ink-text-mode', tool === 'text');
     Object.keys(layers).forEach(function (t) {
       layers[t].classList.toggle('ink-hidden', hidden);
     });
@@ -1488,7 +1715,7 @@
     selectionLayer.setAttribute('viewBox', view.join(' '));
     slides.insertBefore(selectionLayer, slides.firstChild);
 
-    ['highlighter', 'pen'].forEach(function (t) {
+    ['highlighter', 'pen', 'text'].forEach(function (t) {
       var el = document.createElementNS(SVG_NS, 'svg');
       el.setAttribute('class', 'ink-layer ink-' + t);
       el.setAttribute('viewBox', view.join(' '));
@@ -1590,6 +1817,7 @@
       '<hr>' +
       button('data-tool', 'pen', 'Pen') +
       button('data-tool', 'highlighter', 'Highlighter') +
+      button('data-tool', 'text', 'Text box') +
       button('data-tool', 'eraser', 'Eraser (whole strokes; or hold the right button)') +
       button('data-tool', 'select', 'Lasso and move') +
       '<hr>' +
@@ -1718,6 +1946,7 @@
     render();
 
     Reveal.on('slidechanged', function () {
+      if (editing) finishText(true);
       render();
       if (Reveal.isOverview()) renderOverview();
     });

@@ -99,6 +99,12 @@ $ink-button-size: 34px !default;
     stroke-width: 1.5;
     stroke-dasharray: 7 5;
   }
+
+  .ink-resize-handle {
+    fill: #fff;
+    stroke: $ink-accent;
+    stroke-width: 2;
+  }
 }
 
 .reveal .ink-layer .ink-selected {

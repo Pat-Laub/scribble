@@ -49,12 +49,54 @@
     return points.map(function (p) { return [p[0] + dx, p[1] + dy, p[2]]; });
   }
 
+  function scalePoints(points, anchor, scale) {
+    return points.map(function (p) {
+      return [
+        anchor[0] + (p[0] - anchor[0]) * scale,
+        anchor[1] + (p[1] - anchor[1]) * scale,
+        p[2]
+      ];
+    });
+  }
+
+  function resizeHandle(point, box, radius) {
+    if (!box) return null;
+    var corners = [
+      ['nw', box[0], box[1]], ['ne', box[2], box[1]],
+      ['se', box[2], box[3]], ['sw', box[0], box[3]]
+    ];
+    var best = null, distance = Infinity;
+    corners.forEach(function (corner) {
+      var d = Math.hypot(point[0] - corner[1], point[1] - corner[2]);
+      if (d <= radius && d < distance) {
+        best = { name: corner[0], point: [corner[1], corner[2]] };
+        distance = d;
+      }
+    });
+    return best;
+  }
+
+  // Project the dragged corner onto its original diagonal from the fixed
+  // opposite corner. This gives one uniform scale even if the pointer wanders
+  // sideways, preserving handwriting proportions rather than skewing it.
+  function uniformScale(anchor, originalCorner, draggedCorner, minimum) {
+    var x = originalCorner[0] - anchor[0], y = originalCorner[1] - anchor[1];
+    var length = x * x + y * y;
+    if (!length) return 1;
+    var scale = ((draggedCorner[0] - anchor[0]) * x +
+      (draggedCorner[1] - anchor[1]) * y) / length;
+    return Math.max(minimum || 0, scale);
+  }
+
   return {
     rulePositions: rulePositions,
     pointInPolygon: pointInPolygon,
     polygonContainsPoints: polygonContainsPoints,
     pointsBounds: pointsBounds,
     insideBounds: insideBounds,
-    translatePoints: translatePoints
+    translatePoints: translatePoints,
+    scalePoints: scalePoints,
+    resizeHandle: resizeHandle,
+    uniformScale: uniformScale
   };
 });

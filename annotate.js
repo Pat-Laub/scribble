@@ -73,6 +73,7 @@
   var HIGHLIGHT = '#facc15';
 
   var ERASER = 10;      // eraser hit radius, in slide coordinates
+  var RESIZE_HANDLE = 12; // selection-corner display and touch hit radius
   var UNDO_DEPTH = 40;  // snapshots kept per slide
 
   // How far each layer reaches beyond the slide, as a multiple of the deck's
@@ -136,6 +137,7 @@
   var selected = [];         // strokes enclosed by the current lasso
   var lasso = null;          // { p, el } while a selection loop is being drawn
   var moving = null;         // original points while selected strokes are dragged
+  var resizing = null;       // fixed corner and originals while selection scales
   var clipboard = null;      // copied strokes survive slide changes for this session
   var nodes = new WeakMap(); // stroke -> its <path>, for the fade preview
   var thinned = new WeakMap();// stroke -> its simplified points
@@ -465,6 +467,7 @@
     return {
       tool: tool, slide: slideKey(), activePointer: activePointer,
       live: !!live, erasing: erasing, lasso: !!lasso, moving: !!moving,
+      resizing: !!resizing,
       touching: touching, held: held, penSeen: pen, pointersSeen: pointers,
       hidden: hidden
     };
@@ -617,12 +620,22 @@
     selectionBox.setAttribute('height', Math.max(1, box[3] - box[1]));
     selectionBox.setAttribute('class', 'ink-selection-box');
     selectionLayer.appendChild(selectionBox);
+    [[box[0], box[1]], [box[2], box[1]], [box[2], box[3]], [box[0], box[3]]]
+      .forEach(function (corner) {
+        var handle = document.createElementNS(SVG_NS, 'circle');
+        handle.setAttribute('cx', corner[0]);
+        handle.setAttribute('cy', corner[1]);
+        handle.setAttribute('r', RESIZE_HANDLE);
+        handle.setAttribute('class', 'ink-resize-handle');
+        selectionLayer.appendChild(handle);
+      });
   }
 
   function clearSelection() {
     selected = [];
     lasso = null;
     moving = null;
+    resizing = null;
     if (selectionLayer) showSelection();
   }
 
@@ -720,7 +733,7 @@
   function ours(e) {
     if (!tool) return false;
     // Mid-stroke everything is ours, wherever the tip has wandered to.
-    if (live || erasing || lasso || moving || touching !== null) return true;
+    if (live || erasing || lasso || moving || resizing || touching !== null) return true;
     var t = e.target;
     return !!t && (!t.closest || !t.closest(CHROME));
   }
@@ -779,7 +792,21 @@
     var p = at(e);
     if (tool === 'select') {
       var box = selectedBounds();
-      if (selected.length && AnnotationGeometry.insideBounds(p, box, ERASER)) {
+      var handle = selected.length && AnnotationGeometry.resizeHandle(p, box, RESIZE_HANDLE);
+      if (handle) {
+        snapshot();
+        resizing = {
+          anchor: [
+            handle.point[0] === box[0] ? box[2] : box[0],
+            handle.point[1] === box[1] ? box[3] : box[1]
+          ],
+          corner: handle.point,
+          originals: selected.map(function (s) {
+            return s.p.map(function (q) { return q.slice(); });
+          }),
+          widths: selected.map(function (s) { return AnnotationModel.strokeWidth(s, widths); })
+        };
+      } else if (selected.length && AnnotationGeometry.insideBounds(p, box, ERASER)) {
         snapshot();
         moving = {
           start: p,
@@ -825,10 +852,10 @@
   }
 
   function move(e) {
-    if ((live || erasing || lasso || moving) &&
+    if ((live || erasing || lasso || moving || resizing) &&
         !AnnotationModel.ownsPointer(activePointer, e.pointerId)) return;
     hover(e);
-    if (!live && !erasing && !lasso && !moving) return;
+    if (!live && !erasing && !lasso && !moving && !resizing) return;
     // Reveal navigates on a pointer drag as well as on a touch swipe, and it
     // reads every move, not just the ones that follow a pointerdown it saw. A
     // stroke is not a swipe, so the moves that make it up stop here.
@@ -845,6 +872,20 @@
       var here = at(e), dx = here[0] - moving.start[0], dy = here[1] - moving.start[1];
       selected.forEach(function (s, i) {
         s.p = AnnotationGeometry.translatePoints(moving.originals[i], dx, dy);
+        thinned.delete(s);
+        var el = nodes.get(s);
+        if (el) el.setAttribute('d', pathData(s));
+      });
+      showSelection();
+      return;
+    }
+    if (resizing) {
+      var dragged = at(e);
+      var scale = AnnotationGeometry.uniformScale(
+        resizing.anchor, resizing.corner, dragged, 0.1);
+      selected.forEach(function (s, i) {
+        s.p = AnnotationGeometry.scalePoints(resizing.originals[i], resizing.anchor, scale);
+        s.w = resizing.widths[i] * scale;
         thinned.delete(s);
         var el = nodes.get(s);
         if (el) el.setAttribute('d', pathData(s));
@@ -924,7 +965,7 @@
 
   function finishGesture() {
     activePointer = null;
-    var drawn = live || erasing || lasso || moving;
+    var drawn = live || erasing || lasso || moving || resizing;
     unhover();  // a lifted pen leaves no cursor behind; a mouse moves on
     if (lasso) {
       selected = strokes().filter(function (s) {
@@ -935,6 +976,10 @@
       sync();
     } else if (moving) {
       moving = null;
+      showSelection();
+      save();
+    } else if (resizing) {
+      resizing = null;
       showSelection();
       save();
     } else if (erasing) {
@@ -955,7 +1000,7 @@
 
   function up(e) {
     if (!AnnotationModel.ownsPointer(activePointer, e.pointerId)) return;
-    var drawn = live || erasing || lasso || moving;
+    var drawn = live || erasing || lasso || moving || resizing;
     if (drawn) e.stopPropagation();
     finishGesture();
   }

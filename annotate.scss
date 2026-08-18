@@ -105,6 +105,35 @@ $ink-button-size: 34px !default;
   filter: drop-shadow(0 0 3px rgba(38, 104, 199, 0.9));
 }
 
+// Overview is a grid of real slide sections, so each page gets its own compact
+// SVG copies. They inherit reveal's scale/position for that section and never
+// take input. The current ruled-guide preference is previewed on every page.
+.reveal .ink-overview-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 13;
+
+  &.ink-overview-highlighter {
+    z-index: 12;
+    opacity: 0.4;
+    mix-blend-mode: multiply;
+  }
+
+  &.ink-overview-rules {
+    z-index: 11;
+
+    path {
+      fill: none;
+      stroke: rgba(38, 104, 199, 0.2);
+      stroke-width: 1.5;
+    }
+  }
+}
+
 // What the pen, the highlighter and the eraser are all actually drawn on: one
 // box over the whole deck, a sibling of `.slides` rather than a child of it
 // (see build() in annotate.js for why). It only takes the pointer while a tool
@@ -374,7 +403,17 @@ $ink-button-size: 34px !default;
 // there is one layer showing one slide's strokes, so in the stacked print
 // layout it would land on whichever slide happened to be current. Overview mode
 // is the same story — one layer, a whole grid of slides — so hide it there too.
-.print-pdf,
+.print-pdf {
+  .ink-panel,
+  .ink-launchers,
+  .ink-guide,
+  .ink-layer,
+  .ink-overview-layer,
+  .ink-selection-layer,
+  .ink-surface {
+    display: none !important;
+  }
+}
 .reveal.overview {
   .ink-panel,
   .ink-launchers,
@@ -390,6 +429,7 @@ $ink-button-size: 34px !default;
   .ink-launchers,
   .ink-guide,
   .ink-layer,
+  .ink-overview-layer,
   .ink-selection-layer,
   .ink-surface {
     display: none !important;

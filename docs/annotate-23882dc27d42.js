@@ -412,13 +412,18 @@
   function toggleRules() {
     ruled = !ruled;
     try { localStorage.setItem(RULE_STORE, ruled); } catch (e) { /* full or blocked */ }
+    renderOverview();
     sync();
   }
 
-  function drawRules() {
-    rulesPath.setAttribute('d', AnnotationGeometry.rulePositions(H, ruleSpacing, RULES.margin)
+  function rulePathData() {
+    return AnnotationGeometry.rulePositions(H, ruleSpacing, RULES.margin)
       .map(function (y) { return 'M' + RULES.margin + ' ' + y + 'H' + (W - RULES.margin); })
-      .join(' '));
+      .join(' ');
+  }
+
+  function drawRules() {
+    rulesPath.setAttribute('d', rulePathData());
   }
 
   function resizeRules(farther) {
@@ -426,6 +431,7 @@
       ruleSpacing + (farther ? RULES.step : -RULES.step)));
     try { localStorage.setItem(RULE_SPACING_STORE, ruleSpacing); } catch (e) { /* full or blocked */ }
     drawRules();
+    renderOverview();
     sync();
   }
 
@@ -1124,6 +1130,43 @@
     sync();
   }
 
+  function clearOverview() {
+    document.querySelectorAll('.ink-overview-layer').forEach(function (el) { el.remove(); });
+  }
+
+  function overviewLayer(slide, className) {
+    var el = document.createElementNS(SVG_NS, 'svg');
+    el.setAttribute('class', 'ink-overview-layer ' + className);
+    el.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    el.setAttribute('aria-hidden', 'true');
+    slide.appendChild(el);
+    return el;
+  }
+
+  // Overview is a grid of the actual slide sections. Put a small, inert copy
+  // of each slide's own ink inside its section so reveal's overview transform
+  // scales it along with the page. The live layers stay hidden there because
+  // they represent only one slide and would otherwise float over the grid.
+  function renderOverview() {
+    clearOverview();
+    if (!window.Reveal || !Reveal.isOverview || !Reveal.isOverview()) return;
+    Reveal.getSlides().forEach(function (slide) {
+      var list = ink[slideKeyFor(slide)] || [];
+      if (ruled) {
+        var guideLayer = overviewLayer(slide, 'ink-overview-rules');
+        var guidePath = document.createElementNS(SVG_NS, 'path');
+        guidePath.setAttribute('d', rulePathData());
+        guideLayer.appendChild(guidePath);
+      }
+      ['highlighter', 'pen'].forEach(function (t) {
+        var drawn = list.filter(function (stroke) { return stroke.t === t; });
+        if (!drawn.length) return;
+        var layer = overviewLayer(slide, 'ink-overview-' + t);
+        drawn.forEach(function (stroke) { layer.appendChild(pathFor(stroke)); });
+      });
+    });
+  }
+
   function sync() {
     var key = slideKey(), on = !!tool && !hidden;
     panel.classList.toggle('active', on);
@@ -1428,9 +1471,18 @@
     // startup, before a later preset change could give them a different one.
     save();
 
-    Reveal.on('slidechanged', render);
-    Reveal.on('overviewshown', function () { open(false); });  // one layer, one slide
-    Reveal.on('overviewhidden', function () { open(true); });
+    Reveal.on('slidechanged', function () {
+      render();
+      if (Reveal.isOverview()) renderOverview();
+    });
+    Reveal.on('overviewshown', function () {
+      open(false);
+      renderOverview();
+    });
+    Reveal.on('overviewhidden', function () {
+      clearOverview();
+      open(true);
+    });
     Reveal.addKeyBinding(
       { keyCode: 86, key: 'V', description: 'Hide/show the annotations' },
       function () { hide(!hidden); }

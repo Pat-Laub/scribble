@@ -146,6 +146,7 @@
   var stylus = false;        // the stroke in hand has a pressure of its own
   var pointers = false;      // pointer events arrive here, so touches are ignored
   var touching = null;       // identifier of the touch a stroke is being drawn with
+  var activePointer = null;  // only this contact may move or finish the live gesture
   var hovers = 0;            // consecutive hovering mouse moves; see hover()
   var W, H, surface, panel, picker, guide, rulesPath, selectionLayer, selectionBox, saveTimer;
 
@@ -632,6 +633,14 @@
     var borrowed = e.button === 2 || e.button === 5;
     if (e.button && !borrowed) return;      // middle click, and anything else
     if (borrowed && (live || erasing)) return;  // a stroke is already in progress
+    // Ignore secondary touch contacts while a gesture is live. A new pen or
+    // mouse down means an earlier stream was interrupted (pointer ids may be
+    // reused), so finish the abandoned gesture before beginning this one.
+    if (activePointer !== null) {
+      if (e.pointerType === 'touch') return;
+      finishGesture();
+    }
+    activePointer = e.pointerId;
     e.preventDefault();
     e.stopPropagation();            // keep reveal from reading the drag as a swipe
     moreOpen = false;
@@ -692,6 +701,8 @@
   }
 
   function move(e) {
+    if ((live || erasing || lasso || moving) &&
+        !AnnotationModel.ownsPointer(activePointer, e.pointerId)) return;
     hover(e);
     if (!live && !erasing && !lasso && !moving) return;
     // Reveal navigates on a pointer drag as well as on a touch swipe, and it
@@ -778,6 +789,7 @@
       // than the taper a zero would.
       pressure: t.force > 0 ? t.force : 0.5,
       pointerType: t.touchType === 'stylus' ? 'pen' : 'touch',
+      pointerId: 'touch:' + t.identifier,
       button: 0,
       buttons: 1,
       altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey,
@@ -786,9 +798,9 @@
     };
   }
 
-  function up(e) {
+  function finishGesture() {
+    activePointer = null;
     var drawn = live || erasing || lasso || moving;
-    if (drawn) e.stopPropagation();
     unhover();  // a lifted pen leaves no cursor behind; a mouse moves on
     if (lasso) {
       selected = strokes().filter(function (s) {
@@ -815,6 +827,13 @@
     }
     // Whatever the eraser was borrowed from is picked back up on release.
     if (held) { tool = held; held = null; sync(); }
+  }
+
+  function up(e) {
+    if (!AnnotationModel.ownsPointer(activePointer, e.pointerId)) return;
+    var drawn = live || erasing || lasso || moving;
+    if (drawn) e.stopPropagation();
+    finishGesture();
   }
 
   /* ---------------------------- scribble to erase ------------------------- */
@@ -1113,6 +1132,12 @@
         input[type](e);
       }, { capture: true, passive: false });
     });
+    window.addEventListener('blur', function (e) {
+      if (activePointer !== null) finishGesture();
+    }, true);
+    window.addEventListener('lostpointercapture', function (e) {
+      if (AnnotationModel.ownsPointer(activePointer, e.pointerId)) finishGesture();
+    }, true);
     // The right button is the eraser here, so it has no menu to bring up — one
     // would land mid-stroke and interrupt the erase it was part of.
     window.addEventListener('contextmenu', function (e) {
@@ -1209,6 +1234,7 @@
         colour = b.dataset.colour;
         if (tool === 'eraser') tool = lastTool = 'pen';  // a colour implies drawing
       } else if (b.dataset.tool) {
+        if (activePointer !== null) finishGesture();
         if (tool === 'select' && b.dataset.tool !== 'select') clearSelection();
         tool = b.dataset.tool;
         if (tool === 'select') moreOpen = false;

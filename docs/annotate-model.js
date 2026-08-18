@@ -33,6 +33,14 @@
     return values[(at + (direction > 0 ? 1 : -1) + values.length) % values.length];
   }
 
+  // A gesture belongs only to the contact that began it. In particular, a
+  // palm lifting while an Apple Pencil is still down must not finish the
+  // Pencil stroke.
+  function ownsPointer(activePointerId, eventPointerId) {
+    return activePointerId !== null && activePointerId !== undefined &&
+      activePointerId === eventPointerId;
+  }
+
   // Older exports predate per-stroke widths. Capture the receiving device's
   // current rendering width once so the legacy ink keeps its appearance and
   // becomes deterministic from then on.
@@ -51,6 +59,7 @@
     isIPad: isIPad,
     strokeWidth: strokeWidth,
     cycleValue: cycleValue,
+    ownsPointer: ownsPointer,
     ensureStrokeWidths: ensureStrokeWidths
   };
 });

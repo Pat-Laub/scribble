@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  pressureSample, isIPad, strokeWidth, cycleValue, ensureStrokeWidths
+  pressureSample, isIPad, strokeWidth, cycleValue, ownsPointer, ensureStrokeWidths
 } = require('../annotate-model.js');
 
 test('recognises classic and desktop-mode iPads without classifying Macs', () => {
@@ -33,6 +33,14 @@ test('palette cycling follows direction and wraps at both ends', () => {
   assert.equal(cycleValue(colours, 'blue', 1), 'black');
   assert.equal(cycleValue(colours, 'black', -1), 'blue');
   assert.equal(cycleValue(colours, 'red', 0), 'red');
+});
+
+test('only the contact that began a gesture can move or finish it', () => {
+  assert.equal(ownsPointer(7, 7), true);
+  assert.equal(ownsPointer(7, 8), false);
+  assert.equal(ownsPointer(7, undefined), false);
+  assert.equal(ownsPointer(null, 7), false);
+  assert.equal(ownsPointer('touch:4', 'touch:4'), true);
 });
 
 test('legacy strokes capture their current tool width exactly once', () => {

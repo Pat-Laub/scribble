@@ -105,6 +105,7 @@
   var RULE_STORE = 'reveal-ink-rules';
   var RULE_SPACING_STORE = 'reveal-ink-rule-spacing';
   var PRESSURE_STORE = 'reveal-ink-pressure';
+  var DIAGNOSTIC_LIMIT = 12000;
   // Centre ordinary light Pencil writing near perfect-freehand's neutral 0.5
   // width, while retaining useful room on either side for pressure variation.
   var PRESSURE = { enabledByDefault: true, baseline: 0.35, scale: 0.75 };
@@ -148,6 +149,8 @@
   var touching = null;       // identifier of the touch a stroke is being drawn with
   var activePointer = null;  // only this contact may move or finish the live gesture
   var hovers = 0;            // consecutive hovering mouse moves; see hover()
+  var sessionStarted = Date.now();
+  var diagnostics = [];      // bounded, session-only input trace; exported with ink
   var W, H, surface, panel, picker, guide, rulesPath, selectionLayer, selectionBox, saveTimer;
 
   /* ------------------------------ stroke maths --------------------------- */
@@ -439,15 +442,69 @@
     return out;
   }
 
+  function gestureState() {
+    return {
+      tool: tool, slide: slideKey(), activePointer: activePointer,
+      live: !!live, erasing: erasing, lasso: !!lasso, moving: !!moving,
+      touching: touching, held: held, penSeen: pen, pointersSeen: pointers,
+      hidden: hidden
+    };
+  }
+
+  function trace(type, e, handled, note) {
+    var touch = e && e.changedTouches && e.changedTouches.length ? e.changedTouches[0] : null;
+    var p = touch || e || {};
+    var target = e && e.target;
+    diagnostics.push({
+      ms: Date.now() - sessionStarted,
+      type: type,
+      handled: !!handled,
+      note: note || undefined,
+      pointerId: p.pointerId !== undefined ? p.pointerId :
+        (p.identifier !== undefined ? 'touch:' + p.identifier : undefined),
+      pointerType: p.pointerType || p.touchType || undefined,
+      button: p.button,
+      buttons: p.buttons,
+      pressure: p.pressure !== undefined ? p.pressure : p.force,
+      x: isFinite(p.clientX) ? Math.round(p.clientX) : undefined,
+      y: isFinite(p.clientY) ? Math.round(p.clientY) : undefined,
+      changedTouches: e && e.changedTouches ? e.changedTouches.length : undefined,
+      touches: e && e.touches ? e.touches.length : undefined,
+      cancelable: e ? !!e.cancelable : undefined,
+      target: target ? (target.id || target.className || target.tagName || '').toString().slice(0, 100) : undefined,
+      state: gestureState()
+    });
+    if (diagnostics.length > DIAGNOSTIC_LIMIT) diagnostics.splice(0, diagnostics.length - DIAGNOSTIC_LIMIT);
+  }
+
+  function diagnosticReport() {
+    return {
+      sessionStartedAt: new Date(sessionStarted).toISOString(),
+      exportedAt: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      maxTouchPoints: navigator.maxTouchPoints,
+      viewport: { width: innerWidth, height: innerHeight, devicePixelRatio: devicePixelRatio },
+      state: gestureState(),
+      events: diagnostics
+    };
+  }
+
   // localStorage is this browser on this machine: the ink does not follow the
   // deck to another device, and clearing site data takes it. These two put a
-  // whole deck's ink in a file and read one back — the file is the same JSON
-  // that is stored, keyed by slide, so it lands back on the slides it was
-  // drawn on.
+  // whole deck's ink in a file and read one back. The ink remains keyed by
+  // slide so it lands back where it was drawn; exports also wrap a bounded
+  // session trace that can diagnose intermittent input failures.
   function download() {
     var name = (location.pathname.split('/').pop() || 'slides').replace(/\.html?$/, '');
+    var payload = {
+      format: 'scribble-ink',
+      version: 2,
+      ink: kept(),
+      diagnostics: diagnosticReport()
+    };
     var a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(kept())], { type: 'application/json' }));
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(payload)], { type: 'application/json' }));
     a.download = name + '-ink.json';
     panel.appendChild(a);  // not every browser follows a link that isn't in the page
     a.click();
@@ -461,7 +518,10 @@
       var data;
       try { data = JSON.parse(reader.result); } catch (e) { return; }
       if (!data || typeof data !== 'object') return;
-      ink = AnnotationModel.ensureStrokeWidths(data, widths);
+      // Version 1 exports were the ink object itself. Version 2 wraps it so a
+      // support trace can travel in the same download without becoming ink.
+      var imported = data.format === 'scribble-ink' && data.ink ? data.ink : data;
+      ink = AnnotationModel.ensureStrokeWidths(imported, widths);
       undos = {};  // the ink these described is not the ink that is here now
       redos = {};
       render();
@@ -1120,7 +1180,8 @@
     };
     Object.keys(input).forEach(function (type) {
       window.addEventListener(type, function (e) {
-        if (!ours(e)) return;
+        var handled = ours(e);
+        if (!handled) { trace(type, e, false); return; }
         // iPadOS decides for itself what a pencil or a finger on the page
         // means — scroll it, select the text under the tip, start a system
         // gesture — and having decided, it cancels the stream the stroke was
@@ -1130,14 +1191,24 @@
         // the browser is free to ignore the refusal.
         if (type.indexOf('touch') === 0 && e.cancelable) e.preventDefault();
         input[type](e);
+        trace(type, e, true);
       }, { capture: true, passive: false });
     });
     window.addEventListener('blur', function (e) {
       if (activePointer !== null) finishGesture();
+      trace('blur', e, true);
     }, true);
     window.addEventListener('lostpointercapture', function (e) {
-      if (AnnotationModel.ownsPointer(activePointer, e.pointerId)) finishGesture();
+      var handled = AnnotationModel.ownsPointer(activePointer, e.pointerId);
+      if (handled) finishGesture();
+      trace('lostpointercapture', e, handled);
     }, true);
+    window.addEventListener('error', function (e) {
+      trace('error', e, true, e.message || 'window error');
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      trace('unhandledrejection', e, true, String(e.reason || 'unknown rejection'));
+    });
     // The right button is the eraser here, so it has no menu to bring up — one
     // would land mid-stroke and interrupt the erase it was part of.
     window.addEventListener('contextmenu', function (e) {
@@ -1238,6 +1309,7 @@
         if (tool === 'select' && b.dataset.tool !== 'select') clearSelection();
         tool = b.dataset.tool;
         if (tool === 'select') moreOpen = false;
+        trace('toolchange', e, true, tool);
       } else if (b.dataset.act === 'close') {
         return open(false);
       } else if (b.dataset.act === 'thinner' || b.dataset.act === 'thicker') {

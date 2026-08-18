@@ -107,7 +107,7 @@
   var PRESSURE_STORE = 'reveal-ink-pressure';
   // Centre ordinary light Pencil writing near perfect-freehand's neutral 0.5
   // width, while retaining useful room on either side for pressure variation.
-  var PRESSURE = { baseline: 0.35, scale: 0.75 };
+  var PRESSURE = { enabledByDefault: true, baseline: 0.35, scale: 0.75 };
   var RULES = { spacing: 52, min: 28, max: 92, step: 8, margin: 64 };
 
   /* -------------------------------- state -------------------------------- */
@@ -381,7 +381,9 @@
   }
 
   function readPressure() {
-    try { return localStorage.getItem(PRESSURE_STORE) !== 'false'; } catch (e) { return true; }
+    var saved;
+    try { saved = localStorage.getItem(PRESSURE_STORE); } catch (e) { /* blocked */ }
+    return saved === null || saved === undefined ? PRESSURE.enabledByDefault : saved === 'true';
   }
 
   function togglePressure() {
@@ -1024,10 +1026,7 @@
       'M8 ' + (11 - gap) + 'H44 M8 11H44 M8 ' + (11 + gap) + 'H44');
     rulePreview.setAttribute('aria-label', 'Rule spacing: ' + ruleSpacing + ' slide units');
     act('pressure').classList.toggle('active', pressureEnabled);
-    // Once lasso is chosen its labelled row is hidden with this panel; keep the
-    // launcher lit so the compact rail still shows that a secondary tool is in
-    // hand rather than a drawing nib.
-    act('more').classList.toggle('active', moreOpen || tool === 'select');
+    act('more').classList.toggle('active', moreOpen);
     act('more').setAttribute('aria-expanded', moreOpen ? 'true' : 'false');
     panel.querySelector('.ink-more').hidden = !moreOpen || !on;
   }
@@ -1143,6 +1142,7 @@
       button('data-tool', 'pen', 'Pen') +
       button('data-tool', 'highlighter', 'Highlighter') +
       button('data-tool', 'eraser', 'Eraser (whole strokes; or hold the right button)') +
+      button('data-tool', 'select', 'Lasso and move') +
       '<hr>' +
       button('data-act', 'undo', 'Undo (⌘Z)') +
       button('data-act', 'redo', 'Redo (⇧⌘Z)') +
@@ -1159,7 +1159,6 @@
           button('data-act', 'thicker', 'Thicker (])') +
         '</div>' +
         '<hr>' +
-        option('data-tool', 'select', 'Lasso and move') +
         option('data-act', 'rules', 'Ruled writing guides', 'Show/hide ruled writing guides (l)') +
         '<div class="ink-more-title ink-rule-title">Rule spacing</div>' +
         '<div class="ink-rule-row">' +

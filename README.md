@@ -16,7 +16,7 @@ quarto preview
 quarto render
 ```
 
-`docs/` is committed intentionally and served directly by GitHub Pages. Render and commit it whenever the deck changes.
+`docs/` is committed intentionally and served directly by GitHub Pages. Render and commit it whenever the deck changes. A post-render step gives each annotation JavaScript asset a content-hashed filename, so browsers fetch changed drawing code without requiring a hard refresh.
 
 ## Layout
 

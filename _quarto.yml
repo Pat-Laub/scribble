@@ -2,6 +2,10 @@ project:
   type: default
   # Committed to git so GitHub Pages can serve the deck straight from docs/.
   output-dir: docs
+  post-render:
+    # Give Safari a new URL whenever annotation code changes. The generated
+    # filenames use content hashes, matching Quarto's treatment of its CSS.
+    - node scripts/fingerprint-annotation-assets.js
 
 format:
   revealjs:

@@ -103,6 +103,8 @@
   };
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var STORE = 'reveal-ink:' + location.pathname;
+  var CANVAS_STORE = 'reveal-ink-canvas:' + location.pathname;
+  var LEGACY_CANVAS = { width: 1120, height: 700 };
   var PRINT = /(?:^|[?&])print-pdf(?:[=&]|$)/i.test(location.search);
   var PRINT_INK = PRINT && /(?:^|[?&])ink(?:[=&]|$)/i.test(location.search);
   var RULE_STORE = 'reveal-ink-rules';
@@ -121,6 +123,7 @@
   // with the stroke, so a viewer needs no copy of the presenter's tool state.
   var widths = readWidths(); // active presets for the next stroke of each tool
   var ink = AnnotationModel.ensureStrokeWidths(read(), widths);
+  var savedCanvas = readCanvas(); // absent means the original 1120x700 frame
   var undos = {}, redos = {};// { slideKey: [JSON snapshot, ...] }
   var tool = 'pen';          // this deck opens ready to write
   var lastTool = 'pen';      // restored after temporarily hiding the tools
@@ -382,6 +385,31 @@
     try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch (e) { return {}; }
   }
 
+  function readCanvas() {
+    try {
+      var value = JSON.parse(localStorage.getItem(CANVAS_STORE));
+      return value && value.width > 0 && value.height > 0 ? value : null;
+    } catch (e) { return null; }
+  }
+
+  // Canvas metadata prevents a widened deck from shifting the same strokes on
+  // every reload. Files exported before metadata existed are known to use the
+  // original 1120x700 frame and follow this same one-time migration.
+  function migrateCanvasInk(source) {
+    var target = { width: W, height: H };
+    var changed = AnnotationModel.reframeInk(ink, source || savedCanvas || LEGACY_CANVAS, target);
+    savedCanvas = target;
+    try {
+      // Store transformed points before advancing their frame marker. This is
+      // intentionally immediate (rather than save()'s drawing debounce), so a
+      // directly opened print window cannot record the new frame but leave old
+      // coordinates behind if it is closed straight after printing.
+      if (changed) localStorage.setItem(STORE, JSON.stringify(kept()));
+      localStorage.setItem(CANVAS_STORE, JSON.stringify(target));
+    } catch (e) { /* full or blocked */ }
+    return changed;
+  }
+
   function readWidths() {
     var out = {}, saved;
     try { saved = JSON.parse(localStorage.getItem(WIDTH_STORE)); } catch (e) { /* unreadable */ }
@@ -455,7 +483,10 @@
   function save() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(function () {
-      try { localStorage.setItem(STORE, JSON.stringify(kept())); } catch (e) { /* full or blocked */ }
+      try {
+        localStorage.setItem(STORE, JSON.stringify(kept()));
+        localStorage.setItem(CANVAS_STORE, JSON.stringify({ width: W, height: H }));
+      } catch (e) { /* full or blocked */ }
     }, 400);
   }
 
@@ -523,7 +554,8 @@
     var name = (location.pathname.split('/').pop() || 'slides').replace(/\.html?$/, '');
     var payload = {
       format: 'scribble-ink',
-      version: 3,
+      version: 4,
+      canvas: { width: W, height: H },
       ink: kept(),
       diagnostics: diagnosticReport()
     };
@@ -542,13 +574,16 @@
       var data;
       try { data = JSON.parse(reader.result); } catch (e) { return; }
       if (!data || typeof data !== 'object') return;
-      // Version 1 exports were the ink object itself. Version 2 wraps it so a
-      // support trace can travel in the same download without becoming ink.
+      // Version 1 exports were the ink object itself. Versions 2-3 wrap it so
+      // a support trace can travel with the ink; version 4 also records the
+      // canvas frame used by its coordinates.
       var imported = data.format === 'scribble-ink' && data.ink ? data.ink : data;
       ink = AnnotationModel.ensureStrokeWidths(imported, widths);
+      migrateCanvasInk(data.format === 'scribble-ink' && data.canvas ? data.canvas : LEGACY_CANVAS);
       migrateSlideKeys();
       undos = {};  // the ink these described is not the ink that is here now
       redos = {};
+      clipboard = null;
       render();
       save();
     };
@@ -575,6 +610,7 @@
     W = parseFloat(cfg.width) || 960;
     H = parseFloat(cfg.height) || 700;
     view = [-OVERSCAN * W, -OVERSCAN * H, (1 + 2 * OVERSCAN) * W, (1 + 2 * OVERSCAN) * H];
+    migrateCanvasInk();
     var finished = false;
     function layOut() {
       if (finished) return true;
@@ -1672,6 +1708,7 @@
     W = parseFloat(cfg.width) || 960;
     H = parseFloat(cfg.height) || 700;
     view = [-OVERSCAN * W, -OVERSCAN * H, (1 + 2 * OVERSCAN) * W, (1 + 2 * OVERSCAN) * H];
+    migrateCanvasInk();
     migrateSlideKeys();
     build();
     render();

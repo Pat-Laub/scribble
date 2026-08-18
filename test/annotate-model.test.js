@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   pressureSample, isIPad, strokeWidth, cycleValue, ownsPointer, ensureStrokeWidths, cloneStrokes,
-  slideKey, migrateInkKeys, nextItem
+  slideKey, migrateInkKeys, reframeInk, nextItem
 } = require('../annotate-model.js');
 
 test('recognises classic and desktop-mode iPads without classifying Macs', () => {
@@ -106,6 +106,18 @@ test('index-keyed legacy ink migrates without losing distinct stable ink', () =>
   ]), true);
   assert.equal(ink['0.0'], undefined);
   assert.deepEqual(ink['scribble-slide-001'], [keptStroke, oldStroke]);
+});
+
+test('legacy 16:10 ink is centred in the wider 16:9 canvas without distortion', () => {
+  const ink = {
+    'scribble-slide-001': [{
+      t: 'pen', w: 12.4, p: [[-50, 100, 0.3], [1170, 650, 0.8]]
+    }]
+  };
+  assert.equal(reframeInk(ink, { width: 1120, height: 700 }, { width: 1244, height: 700 }), true);
+  assert.deepEqual(ink['scribble-slide-001'][0].p, [[12, 100, 0.3], [1232, 650, 0.8]]);
+  assert.equal(ink['scribble-slide-001'][0].w, 12.4);
+  assert.equal(reframeInk(ink, { width: 1244, height: 700 }, { width: 1244, height: 700 }), false);
 });
 
 test('next-slide lookup follows reveal order and stops at the final slide', () => {

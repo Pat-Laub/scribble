@@ -111,6 +111,36 @@
     return changed;
   }
 
+  // Move ink between canvases without stretching it. Height is the physical
+  // scale used by a presentation, so scale uniformly by height and centre the
+  // result in the new frame. Widening a 1120x700 deck to 1244x700 therefore
+  // shifts every x coordinate by 62 units, bringing both letterbox margins
+  // into the authored page while preserving the writing's size and shape.
+  function reframeInk(ink, source, target) {
+    source = source || {};
+    target = target || {};
+    if (!(source.width > 0 && source.height > 0 && target.width > 0 && target.height > 0)) {
+      return false;
+    }
+    if (source.width === target.width && source.height === target.height) return false;
+    var scale = target.height / source.height;
+    var dx = (target.width - source.width * scale) / 2;
+    var dy = (target.height - source.height * scale) / 2;
+    Object.keys(ink || {}).forEach(function (key) {
+      if (!Array.isArray(ink[key])) return;
+      ink[key].forEach(function (stroke) {
+        stroke.p = (stroke.p || []).map(function (point) {
+          var moved = point.slice();
+          moved[0] = Math.round((point[0] * scale + dx) * 10) / 10;
+          moved[1] = Math.round((point[1] * scale + dy) * 10) / 10;
+          return moved;
+        });
+        if (stroke.w > 0) stroke.w = Math.round(stroke.w * scale * 10) / 10;
+      });
+    });
+    return true;
+  }
+
   function nextItem(items, current) {
     var at = (items || []).indexOf(current);
     return at >= 0 && at + 1 < items.length ? items[at + 1] : null;
@@ -126,6 +156,7 @@
     cloneStrokes: cloneStrokes,
     slideKey: slideKey,
     migrateInkKeys: migrateInkKeys,
+    reframeInk: reframeInk,
     nextItem: nextItem
   };
 });

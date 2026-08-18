@@ -4,8 +4,9 @@
 #
 # The source contains one empty page with a permanent id. In the browser,
 # scribble-pages.js appends another uniquely numbered blank page only when the
-# reader navigates forward from the end. Its page count is browser-local and is
-# restored on reload, so blank pages do not disappear before they receive ink.
+# reader navigates forward from the end. Its ordered page IDs are browser-local
+# and restored on reload, so blank pages survive and middle pages can be deleted
+# without renumbering the pages around them.
 #
 # Ink is stored under the explicit ids, so pages keep their own annotations.
 # Deck-wide settings (theme, dimensions and browser tools) live in _quarto.yml.

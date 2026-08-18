@@ -445,6 +445,20 @@
     save();
   }
 
+  function deletePage() {
+    if (!window.ScribblePages || !ScribblePages.canRemove()) return;
+    if (!confirm('Delete this page and all of its annotations? This cannot be undone.')) return;
+    if (activePointer !== null) finishGesture();
+    if (editing) finishText(true);
+    var key = slideKey();
+    delete ink[key];
+    delete undos[key];
+    delete redos[key];
+    save();
+    ScribblePages.removeCurrent();
+    sync();
+  }
+
   // Marks rather than deletes: what the eraser has passed over fades, and only
   // goes when the eraser is lifted — the same two steps as the scribble
   // gesture, so a slip can be seen and undone before it costs anything.
@@ -619,6 +633,7 @@
       version: 6,
       canvas: { width: W, height: H },
       pages: window.ScribblePages ? ScribblePages.count() : Reveal.getTotalSlides(),
+      pageIds: window.ScribblePages ? ScribblePages.ids() : undefined,
       ink: kept(),
       diagnostics: diagnosticReport()
     };
@@ -640,10 +655,9 @@
       }
       ink = data.ink;
       if (window.ScribblePages) {
-        ScribblePages.ensure(Math.max(
-          Number(data.pages) || 1,
-          ScribblePages.requiredPageCount(Object.keys(ink))
-        ));
+        if (Array.isArray(data.pageIds)) ScribblePages.ensureIds(data.pageIds);
+        ScribblePages.ensureForKeys(Object.keys(ink));
+        ScribblePages.ensure(Number(data.pages) || 1);
       }
       undos = {};  // the ink these described is not the ink that is here now
       redos = {};
@@ -1536,6 +1550,7 @@
     undo: '<path d="M4.5 9.5h10a4.5 4.5 0 0 1 0 9H9"/><path d="M8 5.5l-4 4 4 4"/>',
     redo: '<path d="M19.5 9.5h-10a4.5 4.5 0 0 0 0 9H15"/><path d="M16 5.5l4 4-4 4"/>',
     clear: '<path d="M4 7h16"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 12.5h9L17.5 7"/>',
+    'delete-page': '<path d="M5 7h14"/><path d="M9 7V4.5h6V7"/><path d="M7 7l1 12h8l1-12"/><path d="M10 10.5v5M14 10.5v5"/>',
     rules: '<path d="M4 6h16M4 12h16M4 18h16"/>',
     download: '<path d="M12 4v11"/><path d="M8 11.5l4 4 4-4"/><path d="M4.5 19.5h15"/>',
     upload: '<path d="M12 15.5v-11"/><path d="M8 8.5l4-4 4 4"/><path d="M4.5 19.5h15"/>',
@@ -1716,6 +1731,7 @@
     act('undo').disabled = !(undos[key] || []).length;
     act('redo').disabled = !(redos[key] || []).length;
     act('clear').disabled = !strokes().length;
+    act('delete-page').disabled = !window.ScribblePages || !ScribblePages.canRemove();
     act('copy').disabled = !selected.length;
     act('paste').disabled = !clipboard || !clipboard.strokes.length;
     act('delete').disabled = !selected.length;
@@ -1899,6 +1915,7 @@
         option('data-act', 'pressure', 'Pencil pressure', 'Apple Pencil pressure changes stroke width') +
         '<hr>' +
         option('data-act', 'clear', 'Clear this slide', 'Clear this slide (⇧ for the whole deck)') +
+        option('data-act', 'delete-page', 'Delete this page') +
         option('data-act', 'print', 'Download annotated PDF') +
         option('data-act', 'download', 'Export annotations') +
         option('data-act', 'upload', 'Import annotations') +
@@ -1962,6 +1979,8 @@
         deleteSelection();
       } else if (b.dataset.act === 'clear') {
         clear(e.shiftKey);
+      } else if (b.dataset.act === 'delete-page') {
+        deletePage();
       } else if (b.dataset.act === 'rules') {
         toggleRules();
       } else if (b.dataset.act === 'rules-closer' || b.dataset.act === 'rules-farther') {

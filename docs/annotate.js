@@ -121,6 +121,9 @@
   var held = null;           // the tool the right button borrowed the eraser from
   var armed = false;         // the live stroke has been recognised as a scribble
   var marked = [];           // strokes the eraser or scribble takes when let go
+  var selected = [];         // strokes enclosed by the current lasso
+  var lasso = null;          // { p, el } while a selection loop is being drawn
+  var moving = null;         // original points while selected strokes are dragged
   var nodes = new WeakMap(); // stroke -> its <path>, for the fade preview
   var thinned = new WeakMap();// stroke -> its simplified points
   var layers = {};           // one SVG per drawing tool; see build()
@@ -130,7 +133,7 @@
   var pointers = false;      // pointer events arrive here, so touches are ignored
   var touching = null;       // identifier of the touch a stroke is being drawn with
   var hovers = 0;            // consecutive hovering mouse moves; see hover()
-  var W, H, surface, panel, picker, guide, saveTimer;
+  var W, H, surface, panel, picker, guide, selectionLayer, selectionBox, saveTimer;
 
   /* ------------------------------ stroke maths --------------------------- */
 
@@ -175,6 +178,12 @@
       if (segDist(x, y, p[i], p[i + 1] || p[i]) <= r) return true;
     }
     return false;
+  }
+
+  function selectedBounds() {
+    return AnnotationGeometry.pointsBounds(selected.reduce(function (all, s) {
+      return all.concat(s.p);
+    }, []));
   }
 
   // Ramer-Douglas-Peucker: drop the points that are not doing anything, so the
@@ -461,6 +470,36 @@
     return (evs && evs.length ? evs : [e]).map(at);
   }
 
+  function lassoData(p) {
+    if (!p.length) return '';
+    return 'M' + p.map(function (q) { return q[0] + ' ' + q[1]; }).join('L') + 'Z';
+  }
+
+  function showSelection() {
+    selectionLayer.replaceChildren();
+    selectionBox = null;
+    strokes().forEach(function (s) {
+      var el = nodes.get(s);
+      if (el) el.classList.toggle('ink-selected', selected.indexOf(s) !== -1);
+    });
+    var box = selectedBounds();
+    if (!box) return;
+    selectionBox = document.createElementNS(SVG_NS, 'rect');
+    selectionBox.setAttribute('x', box[0]);
+    selectionBox.setAttribute('y', box[1]);
+    selectionBox.setAttribute('width', Math.max(1, box[2] - box[0]));
+    selectionBox.setAttribute('height', Math.max(1, box[3] - box[1]));
+    selectionBox.setAttribute('class', 'ink-selection-box');
+    selectionLayer.appendChild(selectionBox);
+  }
+
+  function clearSelection() {
+    selected = [];
+    lasso = null;
+    moving = null;
+    if (selectionLayer) showSelection();
+  }
+
   // Safari on iPadOS hands back samples it has already handed back: each
   // pointermove's coalesced batch opens with the whole of the batch the move
   // before it carried. Appending those walks the stroke back over itself and
@@ -511,7 +550,7 @@
   function ours(e) {
     if (!tool) return false;
     // Mid-stroke everything is ours, wherever the tip has wandered to.
-    if (live || erasing || touching !== null) return true;
+    if (live || erasing || lasso || moving || touching !== null) return true;
     var t = e.target;
     return !!t && (!t.closest || !t.closest(CHROME));
   }
@@ -546,6 +585,24 @@
     // rest of it: every point is then read the same way.
     stylus = isStylus(e);
     var p = at(e);
+    if (tool === 'select') {
+      var box = selectedBounds();
+      if (selected.length && AnnotationGeometry.insideBounds(p, box, ERASER)) {
+        snapshot();
+        moving = {
+          start: p,
+          originals: selected.map(function (s) { return s.p.map(function (q) { return q.slice(); }); })
+        };
+      } else {
+        clearSelection();
+        var el = document.createElementNS(SVG_NS, 'path');
+        el.setAttribute('class', 'ink-lasso');
+        selectionLayer.appendChild(el);
+        lasso = { p: [p], el: el };
+      }
+      sync();
+      return;
+    }
     if (tool === 'eraser') { erasing = true; marked = []; erase(p[0], p[1]); sync(); return; }
     snapshot();
     var stroke = { t: tool, c: inkColour(), s: !stylus, p: [p] };
@@ -577,12 +634,30 @@
 
   function move(e) {
     hover(e);
-    if (!live && !erasing) return;
+    if (!live && !erasing && !lasso && !moving) return;
     // Reveal navigates on a pointer drag as well as on a touch swipe, and it
     // reads every move, not just the ones that follow a pointerdown it saw. A
     // stroke is not a swipe, so the moves that make it up stop here.
     e.stopPropagation();
     if (erasing) { points(e).forEach(function (p) { erase(p[0], p[1]); }); return; }
+    if (lasso) {
+      var loopPoints = fresh(points(e), lasso.p);
+      if (!loopPoints.length) return;
+      lasso.p = lasso.p.concat(loopPoints);
+      lasso.el.setAttribute('d', lassoData(lasso.p));
+      return;
+    }
+    if (moving) {
+      var here = at(e), dx = here[0] - moving.start[0], dy = here[1] - moving.start[1];
+      selected.forEach(function (s, i) {
+        s.p = AnnotationGeometry.translatePoints(moving.originals[i], dx, dy);
+        thinned.delete(s);
+        var el = nodes.get(s);
+        if (el) el.setAttribute('d', pathData(s));
+      });
+      showSelection();
+      return;
+    }
     var added = fresh(points(e), live.stroke.p);
     if (!added.length) return;
     live.stroke.p = live.stroke.p.concat(added);
@@ -653,10 +728,21 @@
   }
 
   function up(e) {
-    var drawn = live || erasing;
+    var drawn = live || erasing || lasso || moving;
     if (drawn) e.stopPropagation();
     unhover();  // a lifted pen leaves no cursor behind; a mouse moves on
-    if (erasing) {
+    if (lasso) {
+      selected = strokes().filter(function (s) {
+        return AnnotationGeometry.polygonContainsPoints(lasso.p, s.p);
+      });
+      lasso = null;
+      showSelection();
+      sync();
+    } else if (moving) {
+      moving = null;
+      showSelection();
+      save();
+    } else if (erasing) {
       erasing = false;
       if (marked.length) rub();
     } else if (live) {
@@ -734,6 +820,7 @@
     pen: '<path d="M4 20l3.6-1L19.3 7.3a1.8 1.8 0 0 0 0-2.5l-1.1-1.1a1.8 1.8 0 0 0-2.5 0L4 15.4z"/><path d="M14.9 5.6l3.5 3.5"/>',
     highlighter: '<path d="M6.5 14.5l6-9.5 5.5 3.7-6.2 9.8H7.6z"/><path d="M4 21h16"/>',
     eraser: '<path d="M15.6 4.4l4 4a1.6 1.6 0 0 1 0 2.2l-7.5 7.5a1.6 1.6 0 0 1-2.2 0l-4-4a1.6 1.6 0 0 1 0-2.2l7.5-7.5a1.6 1.6 0 0 1 2.2 0z"/><path d="M9 20h11"/>',
+    select: '<path d="M5.2 6.4c2.5-3 9.8-3 12.8.2 3.5 3.7.8 9.9-4.7 11.7-5.6 1.8-10.4-1.3-9.1-5.8.8-2.7 4.4-4.2 8.1-3.4" stroke-dasharray="2.5 2.5"/><path d="M16.5 16.5l3.5 3.5"/>',
     thinner: '<path d="M5 12h14"/>',
     thicker: '<path d="M12 5v14"/><path d="M5 12h14"/>',
     undo: '<path d="M4.5 9.5h10a4.5 4.5 0 0 1 0 9H9"/><path d="M8 5.5l-4 4 4 4"/>',
@@ -796,6 +883,7 @@
   // holds tens of strokes at most), so there is nothing to be gained by
   // reconciling them; only the in-progress stroke is updated incrementally.
   function render() {
+    clearSelection();
     var paths = { pen: [], highlighter: [] };
     strokes().forEach(function (s) {
       var el = pathFor(s);
@@ -817,6 +905,7 @@
       layers[t].classList.toggle('ink-hidden', hidden);
     });
     guide.classList.toggle('ink-rules-hidden', !ruled);
+    selectionLayer.classList.toggle('ink-hidden', hidden || tool !== 'select');
     // A recognised scribble lights the eraser, but only on the panel: the tool
     // itself has to stay the pen, or the stroke being drawn would be cut off.
     var shown = armed ? 'eraser' : tool;
@@ -865,6 +954,11 @@
       .join(' '));
     guide.appendChild(rulesPath);
     slides.insertBefore(guide, slides.firstChild);
+
+    selectionLayer = document.createElementNS(SVG_NS, 'svg');
+    selectionLayer.setAttribute('class', 'ink-selection-layer');
+    selectionLayer.setAttribute('viewBox', view.join(' '));
+    slides.insertBefore(selectionLayer, slides.firstChild);
 
     ['highlighter', 'pen'].forEach(function (t) {
       var el = document.createElementNS(SVG_NS, 'svg');
@@ -944,6 +1038,7 @@
       button('data-tool', 'pen', 'Pen') +
       button('data-tool', 'highlighter', 'Highlighter') +
       button('data-tool', 'eraser', 'Eraser (whole strokes; or hold the right button)') +
+      button('data-tool', 'select', 'Lasso annotations, then drag the selection') +
       '<hr>' +
       button('data-act', 'thinner', 'Thinner ([)') +
       // The width between them, drawn in an SVG of its own like the icons
@@ -997,6 +1092,7 @@
         colour = b.dataset.colour;
         if (tool === 'eraser') tool = lastTool = 'pen';  // a colour implies drawing
       } else if (b.dataset.tool) {
+        if (tool === 'select' && b.dataset.tool !== 'select') clearSelection();
         tool = b.dataset.tool;
       } else if (b.dataset.act === 'close') {
         return open(false);

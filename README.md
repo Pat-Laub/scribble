@@ -5,7 +5,7 @@ Drawing uses the MIT-licensed [perfect-freehand](https://github.com/steveruizok/
 
 ## Using it
 
-The drawing tools are open as soon as the deck starts. Choose a pen, highlighter or eraser and one of five colours. `Cmd/Ctrl+Z` undoes, `v` hides or restores ink, and `l` toggles ruled writing guides. Scribble over a stroke, or hold the right mouse/stylus barrel button, to erase it. A one-finger horizontal swipe changes slide; multi-contact gestures are ignored so a resting palm cannot accidentally navigate.
+The drawing tools are open as soon as the deck starts. Choose a pen, highlighter, eraser, or lasso and one of five colours. Circle annotations with the lasso, then drag inside its selection box to move them. `Cmd/Ctrl+Z` undoes, `v` hides or restores ink, and `l` toggles ruled writing guides. Scribble over a stroke, or hold the right mouse/stylus barrel button, to erase it. A one-finger horizontal swipe changes slide; multi-contact gestures are ignored so a resting palm cannot accidentally navigate.
 
 Annotations are saved locally by slide and survive reloads. Use the panel's export/import buttons to move them to another browser or device. Add blank slides only at the end of `index.qmd`: annotations are keyed by slide index.
 

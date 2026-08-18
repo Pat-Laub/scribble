@@ -75,6 +75,36 @@ $ink-button-size: 34px !default;
   }
 }
 
+.reveal .ink-selection-layer {
+  position: absolute;
+  inset: -100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 14;
+
+  &.ink-hidden {
+    display: none;
+  }
+
+  .ink-lasso {
+    fill: rgba(38, 104, 199, 0.08);
+    stroke: $ink-accent;
+    stroke-width: 2;
+    stroke-dasharray: 7 5;
+  }
+
+  .ink-selection-box {
+    fill: none;
+    stroke: $ink-accent;
+    stroke-width: 1.5;
+    stroke-dasharray: 7 5;
+  }
+}
+
+.reveal .ink-layer .ink-selected {
+  filter: drop-shadow(0 0 3px rgba(38, 104, 199, 0.9));
+}
+
 // What the pen, the highlighter and the eraser are all actually drawn on: one
 // box over the whole deck, a sibling of `.slides` rather than a child of it
 // (see build() in annotate.js for why). It only takes the pointer while a tool
@@ -246,6 +276,7 @@ $ink-button-size: 34px !default;
   .ink-launchers,
   .ink-guide,
   .ink-layer,
+  .ink-selection-layer,
   .ink-surface {
     display: none !important;
   }
@@ -255,6 +286,7 @@ $ink-button-size: 34px !default;
   .ink-launchers,
   .ink-guide,
   .ink-layer,
+  .ink-selection-layer,
   .ink-surface {
     display: none !important;
   }

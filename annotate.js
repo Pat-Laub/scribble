@@ -649,7 +649,7 @@
     sync();
   }
 
-  function pasteSelection() {
+  function pasteSelection(options) {
     if (!clipboard || !clipboard.strokes.length) return;
     if (activePointer !== null) finishGesture();
     var key = slideKey();
@@ -658,7 +658,15 @@
     // On another slide, preserve its exact position; repeated pastes there fan
     // out slightly instead of landing invisibly on top of one another.
     var offset = (previous + (key === clipboard.source ? 1 : 0)) * 18;
-    var copies = AnnotationModel.cloneStrokes(clipboard.strokes, offset, offset);
+    var dx = offset, dy = offset;
+    if (options && isFinite(options.top)) {
+      var box = AnnotationGeometry.pointsBounds(clipboard.strokes.reduce(function (all, stroke) {
+        return all.concat(stroke.p);
+      }, []));
+      dx = 0;
+      dy = box ? options.top - box[1] : 0;
+    }
+    var copies = AnnotationModel.cloneStrokes(clipboard.strokes, dx, dy);
     clipboard.pastes[key] = previous + 1;
     snapshot(key);
     ink[key] = (ink[key] || []).concat(copies);
@@ -669,6 +677,31 @@
     showSelection();
     sync();
     save();
+  }
+
+  function nextSlide() {
+    return AnnotationModel.nextItem(Reveal.getSlides(), Reveal.getCurrentSlide());
+  }
+
+  // The common lecture move as one action: retain a clipboard copy, advance to
+  // the next actual reveal section (including an uncounted replacement slide),
+  // and place the copied working at the writing margin ready to drag or resize.
+  function continueSelection() {
+    var target = selected.length && nextSlide();
+    if (!target) return;
+    copySelection();
+    var indices = Reveal.getIndices(target);
+    var landed = false;
+    function land(e) {
+      if (landed || (e && e.currentSlide && e.currentSlide !== target)) return;
+      if (Reveal.getCurrentSlide() !== target) return;
+      landed = true;
+      if (Reveal.off) Reveal.off('slidechanged', land);
+      requestAnimationFrame(function () { pasteSelection({ top: RULES.margin }); });
+    }
+    Reveal.on('slidechanged', land);
+    Reveal.slide(indices.h, indices.v);
+    land();
   }
 
   function deleteSelection() {
@@ -1070,6 +1103,7 @@
     select: '<path d="M5.2 6.4c2.5-3 9.8-3 12.8.2 3.5 3.7.8 9.9-4.7 11.7-5.6 1.8-10.4-1.3-9.1-5.8.8-2.7 4.4-4.2 8.1-3.4" stroke-dasharray="2.5 2.5"/><path d="M16.5 16.5l3.5 3.5"/>',
     copy: '<rect x="8" y="8" width="11" height="11" rx="1.5"/><path d="M16 8V5H5v11h3"/>',
     paste: '<path d="M9 6h6v3H9z"/><path d="M8 7H6v13h12V7h-2"/><path d="M9 13h6M9 17h5"/>',
+    continue: '<rect x="3.5" y="5" width="8" height="12" rx="1"/><rect x="13" y="7" width="7.5" height="12" rx="1"/><path d="M8 12h8M13 9l3 3-3 3"/>',
     pressure: '<path d="M4 16c2.2-5.3 4.7-8 7.5-8 3.2 0 5.8 3.3 8.5 10"/><circle cx="11.5" cy="8" r="2.2"/><path d="M4 20h16"/>',
     thinner: '<path d="M5 12h14"/>',
     thicker: '<path d="M12 5v14"/><path d="M5 12h14"/>',
@@ -1248,6 +1282,7 @@
     act('copy').disabled = !selected.length;
     act('paste').disabled = !clipboard || !clipboard.strokes.length;
     act('delete').disabled = !selected.length;
+    act('continue').disabled = !selected.length || !nextSlide();
     act('rules').classList.toggle('active', ruled);
     act('rules-closer').disabled = !ruled || ruleSpacing <= RULES.min;
     act('rules-farther').disabled = !ruled || ruleSpacing >= RULES.max;
@@ -1398,6 +1433,7 @@
       button('data-act', 'redo', 'Redo (⇧⌘Z)') +
       button('data-act', 'more', 'More annotation options') +
       '<div class="ink-selection-actions" role="group" aria-label="Selection actions" hidden>' +
+        button('data-act', 'continue', 'Continue on next slide (⌘Enter)') +
         button('data-act', 'copy', 'Copy selection (⌘C)') +
         button('data-act', 'paste', 'Paste copied ink (⌘V)') +
         button('data-act', 'delete', 'Delete selection (Delete)', 'clear') +
@@ -1477,6 +1513,8 @@
         step(undos, redos);
       } else if (b.dataset.act === 'redo') {
         step(redos, undos);
+      } else if (b.dataset.act === 'continue') {
+        continueSelection();
       } else if (b.dataset.act === 'copy') {
         copySelection();
       } else if (b.dataset.act === 'paste') {
@@ -1552,6 +1590,8 @@
         copySelection();
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v' && clipboard) {
         pasteSelection();
+      } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && selected.length && nextSlide()) {
+        continueSelection();
       } else if (tool === 'select' && selected.length &&
                  (e.key === 'Delete' || e.key === 'Backspace')) {
         deleteSelection();

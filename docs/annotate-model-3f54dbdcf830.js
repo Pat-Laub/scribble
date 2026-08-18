@@ -111,6 +111,11 @@
     return changed;
   }
 
+  function nextItem(items, current) {
+    var at = (items || []).indexOf(current);
+    return at >= 0 && at + 1 < items.length ? items[at + 1] : null;
+  }
+
   return {
     pressureSample: pressureSample,
     isIPad: isIPad,
@@ -120,6 +125,7 @@
     ensureStrokeWidths: ensureStrokeWidths,
     cloneStrokes: cloneStrokes,
     slideKey: slideKey,
-    migrateInkKeys: migrateInkKeys
+    migrateInkKeys: migrateInkKeys,
+    nextItem: nextItem
   };
 });

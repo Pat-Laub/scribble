@@ -53,6 +53,28 @@ $ink-button-size: 34px !default;
   }
 }
 
+// A local writing aid, deliberately separate from the annotation model. In a
+// multiplexed deck the presenter can create this view without sending anything
+// to audience clients.
+.reveal .ink-guide {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 11;
+  color: rgba(38, 104, 199, 0.2);
+
+  path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+  }
+
+  &.ink-rules-hidden {
+    display: none;
+  }
+}
+
 // What the pen, the highlighter and the eraser are all actually drawn on: one
 // box over the whole deck, a sibling of `.slides` rather than a child of it
 // (see build() in annotate.js for why). It only takes the pointer while a tool
@@ -222,6 +244,7 @@ $ink-button-size: 34px !default;
 .reveal.overview {
   .ink-panel,
   .ink-launchers,
+  .ink-guide,
   .ink-layer,
   .ink-surface {
     display: none !important;
@@ -230,6 +253,7 @@ $ink-button-size: 34px !default;
 @media print {
   .ink-panel,
   .ink-launchers,
+  .ink-guide,
   .ink-layer,
   .ink-surface {
     display: none !important;

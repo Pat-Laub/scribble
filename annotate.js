@@ -102,6 +102,8 @@
   };
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var STORE = 'reveal-ink:' + location.pathname;
+  var RULE_STORE = 'reveal-ink-rules';
+  var RULES = { spacing: 52, margin: 64 };
 
   /* -------------------------------- state -------------------------------- */
 
@@ -112,6 +114,7 @@
   var tool = 'pen';          // this deck opens ready to write
   var lastTool = 'pen';      // restored after temporarily hiding the tools
   var hidden = false;        // the ink is parked, showing the slide underneath
+  var ruled = readRules();    // local view preference; never part of shared ink
   var colour = COLOURS[0][1];
   var live = null;           // { stroke, el } while a stroke is being drawn
   var erasing = false;       // an eraser drag is in progress
@@ -127,7 +130,7 @@
   var pointers = false;      // pointer events arrive here, so touches are ignored
   var touching = null;       // identifier of the touch a stroke is being drawn with
   var hovers = 0;            // consecutive hovering mouse moves; see hover()
-  var W, H, surface, panel, picker, saveTimer;
+  var W, H, surface, panel, picker, guide, saveTimer;
 
   /* ------------------------------ stroke maths --------------------------- */
 
@@ -342,6 +345,16 @@
       out[t] = saved && saved[t] > 0 ? clampWidth(t, saved[t]) : WIDTHS[t];
     });
     return out;
+  }
+
+  function readRules() {
+    try { return localStorage.getItem(RULE_STORE) === 'true'; } catch (e) { return false; }
+  }
+
+  function toggleRules() {
+    ruled = !ruled;
+    try { localStorage.setItem(RULE_STORE, ruled); } catch (e) { /* full or blocked */ }
+    sync();
   }
 
   function clampWidth(t, w) {
@@ -726,6 +739,7 @@
     undo: '<path d="M4.5 9.5h10a4.5 4.5 0 0 1 0 9H9"/><path d="M8 5.5l-4 4 4 4"/>',
     redo: '<path d="M19.5 9.5h-10a4.5 4.5 0 0 0 0 9H15"/><path d="M16 5.5l4 4-4 4"/>',
     clear: '<path d="M4 7h16"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 12.5h9L17.5 7"/>',
+    rules: '<path d="M4 6h16M4 12h16M4 18h16"/>',
     download: '<path d="M12 4v11"/><path d="M8 11.5l4 4 4-4"/><path d="M4.5 19.5h15"/>',
     upload: '<path d="M12 15.5v-11"/><path d="M8 8.5l4-4 4 4"/><path d="M4.5 19.5h15"/>',
     fullscreen: '<path d="M4 9V4h5"/><path d="M15 4h5v5"/><path d="M20 15v5h-5"/><path d="M9 20H4v-5"/>'
@@ -802,6 +816,7 @@
     Object.keys(layers).forEach(function (t) {
       layers[t].classList.toggle('ink-hidden', hidden);
     });
+    guide.classList.toggle('ink-rules-hidden', !ruled);
     // A recognised scribble lights the eraser, but only on the panel: the tool
     // itself has to stay the pen, or the stroke being drawn would be cut off.
     var shown = armed ? 'eraser' : tool;
@@ -826,6 +841,7 @@
     act('undo').disabled = !(undos[key] || []).length;
     act('redo').disabled = !(redos[key] || []).length;
     act('clear').disabled = !strokes().length;
+    act('rules').classList.toggle('active', ruled);
   }
 
   function build() {
@@ -840,6 +856,16 @@
     // siblings, and the layers' `z-index` puts them above the slide content
     // regardless of document order.
     var slides = document.querySelector('.reveal .slides');
+    guide = document.createElementNS(SVG_NS, 'svg');
+    guide.setAttribute('class', 'ink-guide');
+    guide.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    var rulesPath = document.createElementNS(SVG_NS, 'path');
+    rulesPath.setAttribute('d', AnnotationGeometry.rulePositions(H, RULES.spacing, RULES.margin)
+      .map(function (y) { return 'M' + RULES.margin + ' ' + y + 'H' + (W - RULES.margin); })
+      .join(' '));
+    guide.appendChild(rulesPath);
+    slides.insertBefore(guide, slides.firstChild);
+
     ['highlighter', 'pen'].forEach(function (t) {
       var el = document.createElementNS(SVG_NS, 'svg');
       el.setAttribute('class', 'ink-layer ink-' + t);
@@ -931,6 +957,7 @@
       button('data-act', 'undo', 'Undo (⌘Z)') +
       button('data-act', 'redo', 'Redo (⇧⌘Z)') +
       button('data-act', 'clear', 'Clear this slide (⇧ for the whole deck)') +
+      button('data-act', 'rules', 'Show/hide ruled writing guides (l)') +
       '<hr>' +
       button('data-act', 'download', 'Save the deck’s annotations to a file') +
       button('data-act', 'upload', 'Load annotations from a file');
@@ -981,6 +1008,8 @@
         step(redos, undos);
       } else if (b.dataset.act === 'clear') {
         clear(e.shiftKey);
+      } else if (b.dataset.act === 'rules') {
+        toggleRules();
       } else if (b.dataset.act === 'download') {
         download();
       } else if (b.dataset.act === 'upload') {
@@ -1006,6 +1035,10 @@
     Reveal.addKeyBinding(
       { keyCode: 86, key: 'V', description: 'Hide/show the annotations' },
       function () { hide(!hidden); }
+    );
+    Reveal.addKeyBinding(
+      { keyCode: 76, key: 'L', description: 'Show/hide ruled writing guides' },
+      toggleRules
     );
 
     // Capture the annotation shortcuts before reveal sees them.

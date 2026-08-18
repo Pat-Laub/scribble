@@ -503,6 +503,17 @@
     };
   }
 
+  function saveBlob(blob, filename) {
+    var href = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = href;
+    a.download = filename;
+    panel.appendChild(a);  // not every browser follows a link that isn't in the page
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(href); }, 5000);
+  }
+
   // localStorage is this browser on this machine: the ink does not follow the
   // deck to another device, and clearing site data takes it. These two put a
   // whole deck's ink in a file and read one back. The ink remains keyed by
@@ -517,13 +528,10 @@
       ink: kept(),
       diagnostics: diagnosticReport()
     };
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(payload)], { type: 'application/json' }));
-    a.download = name + '-ink.json';
-    panel.appendChild(a);  // not every browser follows a link that isn't in the page
-    a.click();
-    a.remove();
-    setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+    saveBlob(
+      new Blob([JSON.stringify(payload)], { type: 'application/json' }),
+      name + '-ink.json'
+    );
   }
 
   function upload(file) {
@@ -547,6 +555,53 @@
   }
 
   /* ---------------------------- ink in the PDF --------------------------- */
+
+  // Include every printable leaf section, including slides reveal deliberately
+  // leaves out of its counted-slide list. Fragment animation states remain one
+  // page because they live inside the same section.
+  function printableSlides() {
+    var root = Reveal.getSlidesElement ? Reveal.getSlidesElement() : document.querySelector('.reveal .slides');
+    var result = [];
+    if (!root) return result;
+    Array.prototype.forEach.call(root.children, function (horizontal) {
+      if (horizontal.tagName !== 'SECTION' || horizontal.dataset.visibility === 'hidden') return;
+      var verticals = Array.prototype.filter.call(horizontal.children, function (child) {
+        return child.tagName === 'SECTION' && child.dataset.visibility !== 'hidden';
+      });
+      if (verticals.length) result = result.concat(verticals);
+      else result.push(horizontal);
+    });
+    return result;
+  }
+
+  // Scribble's pages have no authored slide content, so they can be emitted
+  // directly as compact vector PDF pages. This bypasses the operating system's
+  // print-paper choices entirely — notably iPad Safari's forced A4 page — while
+  // retaining the exact deck aspect ratio, ruled guides and pressure-shaped ink.
+  function downloadPdf() {
+    if (!window.AnnotationPdf) return printPdf();
+    try {
+      var pages = printableSlides().map(function (slide) {
+        return {
+          strokes: (ink[AnnotationModel.slideKey(slide)] || []).map(function (stroke) {
+            return { tool: stroke.t, colour: stroke.c, path: pathData(stroke) };
+          })
+        };
+      });
+      var data = AnnotationPdf.create({
+        width: W,
+        height: H,
+        pages: pages,
+        rules: ruled ? AnnotationGeometry.rulePositions(H, ruleSpacing, RULES.margin) : [],
+        ruleMargin: RULES.margin
+      });
+      var name = (document.title || 'Scribble').trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-') || 'Scribble';
+      saveBlob(new Blob([data], { type: 'application/pdf' }), name + '.pdf');
+    } catch (error) {
+      console.error('Direct PDF download failed; opening the print view instead.', error);
+      printPdf();
+    }
+  }
 
   // Open Reveal's own one-slide-per-page print view. Both windows share the
   // same localStorage origin, so the print window can lay the current ink and
@@ -1570,7 +1625,7 @@
         option('data-act', 'pressure', 'Pencil pressure', 'Apple Pencil pressure changes stroke width') +
         '<hr>' +
         option('data-act', 'clear', 'Clear this slide', 'Clear this slide (⇧ for the whole deck)') +
-        option('data-act', 'print', 'Save annotated PDF') +
+        option('data-act', 'print', 'Download annotated PDF') +
         option('data-act', 'download', 'Export annotations') +
         option('data-act', 'upload', 'Import annotations') +
       '</div>';
@@ -1644,7 +1699,7 @@
       } else if (b.dataset.act === 'download') {
         download();
       } else if (b.dataset.act === 'print') {
-        printPdf();
+        downloadPdf();
       } else if (b.dataset.act === 'upload') {
         picker.click();
       }

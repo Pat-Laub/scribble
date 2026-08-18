@@ -7,6 +7,7 @@ const ASSETS = [
   'perfect-freehand.min.js',
   'annotate-geometry.js',
   'annotate-model.js',
+  'annotate-pdf.js',
   'annotate.js'
 ];
 

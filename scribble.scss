@@ -56,6 +56,34 @@ $ink-button-size: 34px;
   height: 100%;
 }
 
+// The annotation surface deliberately reaches through Reveal's letterboxing,
+// which is useful for controls and for beginning a stroke beside an edge, but
+// on a blank white deck the margins otherwise look exactly like canvas space.
+// Distinguish the area outside the target 16:9 canvas with a hairline at its
+// edge and a very light wash. These margins are screen chrome, never slide
+// content; Overview and every print path remove them below.
+// On a 16:9 display it coincides with the viewport edge and disappears naturally.
+.reveal:not(.overview) .slides::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 1px rgba(29, 29, 29, 0.18),
+    0 0 0 100vmax rgba(29, 29, 29, 0.035);
+}
+
+.print-pdf .reveal .slides::before {
+  display: none;
+}
+
+@media print {
+  .reveal .slides::before {
+    display: none !important;
+  }
+}
+
 // The progress bar along the bottom is a *button* as well as a gauge: reveal
 // hangs a 10px-tall invisible strip above the 3px bar (`.progress::after`) and
 // jumps to whichever slide you clicked along its width. Brushing the bottom of

@@ -123,6 +123,8 @@
   var ruled = readRules();    // local view preference; never part of shared ink
   var pressureEnabled = readPressure(); // captured into each new stroke's points
   var colour = COLOURS[0][1];
+  var moreOpen = false;       // session controls expand beside the writing rail
+  var lastWheel = 0;          // one colour step per physical wheel gesture
   var live = null;           // { stroke, el } while a stroke is being drawn
   var erasing = false;       // an eraser drag is in progress
   var held = null;           // the tool the right button borrowed the eraser from
@@ -585,6 +587,19 @@
     // swipe to the next one — never ink. The event is left alone rather than
     // taken, so reveal still gets to read it as a swipe.
     if (pen && e.pointerType === 'touch') return;
+    // A Bluetooth mouse's wheel button alternates the two drawing tools. It is
+    // deliberately kept out of the pointer stream, so it cannot leave a dot or
+    // start the browser's autoscroll behaviour.
+    if (e.button === 1) {
+      e.preventDefault();
+      e.stopPropagation();
+      clearSelection();
+      tool = tool === 'pen' ? 'highlighter' : 'pen';
+      lastTool = tool;
+      moreOpen = false;
+      sync();
+      return;
+    }
     // Hold the right button — or the barrel button a stylus reports as one, or
     // the inverted end of a pen, which is button 5 — and it erases for as long
     // as it is held: scribble over what is to go, let go, and the tool that was
@@ -595,6 +610,7 @@
     if (borrowed && (live || erasing)) return;  // a stroke is already in progress
     e.preventDefault();
     e.stopPropagation();            // keep reveal from reading the drag as a swipe
+    moreOpen = false;
     unhover();                      // nothing to point with while the tip is down
     // A stroke survives the pointer leaving the surface; nothing else in the
     // deck wants the events, so carrying on without capture is no worse.
@@ -849,6 +865,7 @@
     rules: '<path d="M4 6h16M4 12h16M4 18h16"/>',
     download: '<path d="M12 4v11"/><path d="M8 11.5l4 4 4-4"/><path d="M4.5 19.5h15"/>',
     upload: '<path d="M12 15.5v-11"/><path d="M8 8.5l4-4 4 4"/><path d="M4.5 19.5h15"/>',
+    more: '<circle cx="6" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1" fill="currentColor" stroke="none"/>',
     fullscreen: '<path d="M4 9V4h5"/><path d="M15 4h5v5"/><path d="M20 15v5h-5"/><path d="M9 20H4v-5"/>'
   };
 
@@ -860,6 +877,30 @@
   function button(attr, name, title) {
     return '<button class="ink-btn" ' + attr + '="' + name + '" title="' + title + '">' +
       icon(name) + '</button>';
+  }
+
+  function option(attr, name, label, title) {
+    return '<button class="ink-option" ' + attr + '="' + name + '" title="' + (title || label) + '">' +
+      icon(name) + '<span>' + label + '</span></button>';
+  }
+
+  function cycleColour(direction) {
+    colour = AnnotationModel.cycleValue(COLOURS.map(function (c) { return c[1]; }), colour, direction);
+    sync();
+  }
+
+  // A wheel notch chooses the neighbouring colour. Trackpads and Magic Mouse
+  // momentum arrive as a burst of wheel events, so rate-limit the burst rather
+  // than racing through the whole palette at once. Ctrl-wheel remains the
+  // browser's pinch/zoom gesture.
+  function wheelColour(e) {
+    if (hidden || e.ctrlKey || !e.deltaY || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var now = Date.now();
+    if (now - lastWheel < 220) return;
+    lastWheel = now;
+    cycleColour(e.deltaY > 0 ? 1 : -1);
   }
 
   // Expands the element reveal's own F shortcut expands, so the two agree about
@@ -880,6 +921,7 @@
   function open(on) {
     if (tool) lastTool = tool;
     tool = on ? lastTool : null;
+    if (!on) moreOpen = false;
     hidden = false;  // the ink comes back with the tools that made it
     sync();
   }
@@ -890,6 +932,7 @@
   // the ink, the panel and the tool that was in hand, all where they were.
   function hide(on) {
     hidden = on;
+    if (on) moreOpen = false;
     sync();
   }
 
@@ -952,6 +995,12 @@
     act('clear').disabled = !strokes().length;
     act('rules').classList.toggle('active', ruled);
     act('pressure').classList.toggle('active', pressureEnabled);
+    // Once lasso is chosen its labelled row is hidden with this panel; keep the
+    // launcher lit so the compact rail still shows that a secondary tool is in
+    // hand rather than a drawing nib.
+    act('more').classList.toggle('active', moreOpen || tool === 'select');
+    act('more').setAttribute('aria-expanded', moreOpen ? 'true' : 'false');
+    panel.querySelector('.ink-more').hidden = !moreOpen || !on;
   }
 
   function build() {
@@ -1043,6 +1092,14 @@
     window.addEventListener('contextmenu', function (e) {
       if (ours(e)) e.preventDefault();
     }, true);
+    // Suppress the compatibility click that some browsers send after a wheel
+    // button press, and turn wheel motion over the slide into colour changes.
+    window.addEventListener('auxclick', function (e) {
+      if (e.button === 1 && ours(e)) e.preventDefault();
+    }, true);
+    window.addEventListener('wheel', function (e) {
+      if (ours(e)) wheelColour(e);
+    }, { capture: true, passive: false });
     // Safari's own pinch and rotate, which have nothing to do on a slide.
     ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (type) {
       window.addEventListener(type, function (e) { if (tool) e.preventDefault(); }, true);
@@ -1059,25 +1116,30 @@
       button('data-tool', 'pen', 'Pen') +
       button('data-tool', 'highlighter', 'Highlighter') +
       button('data-tool', 'eraser', 'Eraser (whole strokes; or hold the right button)') +
-      button('data-tool', 'select', 'Lasso annotations, then drag the selection') +
-      '<hr>' +
-      button('data-act', 'thinner', 'Thinner ([)') +
-      // The width between them, drawn in an SVG of its own like the icons
-      // rather than set as text: the panel then sizes it, instead of the deck's
-      // own type doing it at 40px in a 44px-wide rail.
-      '<svg class="ink-nib" width="34" height="15" viewBox="0 0 34 15" fill="currentColor" ' +
-      'opacity="0.6"><title>How wide the tool in hand draws, in slide units</title>' +
-      '<text x="17" y="12" text-anchor="middle" font-size="12"></text></svg>' +
-      button('data-act', 'thicker', 'Thicker (])') +
-      button('data-act', 'pressure', 'Apple Pencil pressure changes stroke width') +
       '<hr>' +
       button('data-act', 'undo', 'Undo (⌘Z)') +
       button('data-act', 'redo', 'Redo (⇧⌘Z)') +
-      button('data-act', 'clear', 'Clear this slide (⇧ for the whole deck)') +
-      button('data-act', 'rules', 'Show/hide ruled writing guides (l)') +
-      '<hr>' +
-      button('data-act', 'download', 'Save the deck’s annotations to a file') +
-      button('data-act', 'upload', 'Load annotations from a file');
+      button('data-act', 'more', 'More annotation options') +
+      '<div class="ink-more" role="group" aria-label="Annotation options" hidden>' +
+        '<div class="ink-more-title">Stroke width</div>' +
+        '<div class="ink-width-row">' +
+          button('data-act', 'thinner', 'Thinner ([)') +
+          // The width between them is an SVG so the deck's large body type
+          // cannot enlarge it inside this compact control.
+          '<svg class="ink-nib" width="52" height="22" viewBox="0 0 52 22" fill="currentColor" ' +
+          'opacity="0.65"><title>How wide the tool in hand draws, in slide units</title>' +
+          '<text x="26" y="16" text-anchor="middle" font-size="13"></text></svg>' +
+          button('data-act', 'thicker', 'Thicker (])') +
+        '</div>' +
+        '<hr>' +
+        option('data-tool', 'select', 'Lasso and move') +
+        option('data-act', 'rules', 'Ruled writing guides', 'Show/hide ruled writing guides (l)') +
+        option('data-act', 'pressure', 'Pencil pressure', 'Apple Pencil pressure changes stroke width') +
+        '<hr>' +
+        option('data-act', 'clear', 'Clear this slide', 'Clear this slide (⇧ for the whole deck)') +
+        option('data-act', 'download', 'Export annotations') +
+        option('data-act', 'upload', 'Import annotations') +
+      '</div>';
 
     // The file to load is chosen with an input the panel keeps out of sight;
     // its button clicks it.
@@ -1116,6 +1178,7 @@
       } else if (b.dataset.tool) {
         if (tool === 'select' && b.dataset.tool !== 'select') clearSelection();
         tool = b.dataset.tool;
+        if (tool === 'select') moreOpen = false;
       } else if (b.dataset.act === 'close') {
         return open(false);
       } else if (b.dataset.act === 'thinner' || b.dataset.act === 'thicker') {
@@ -1130,6 +1193,8 @@
         toggleRules();
       } else if (b.dataset.act === 'pressure') {
         togglePressure();
+      } else if (b.dataset.act === 'more') {
+        moreOpen = !moreOpen;
       } else if (b.dataset.act === 'download') {
         download();
       } else if (b.dataset.act === 'upload') {
@@ -1167,7 +1232,10 @@
     // Capture the annotation shortcuts before reveal sees them.
     document.addEventListener('keydown', function (e) {
       if (!tool) return;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+      if (e.key === 'Escape' && moreOpen) {
+        moreOpen = false;
+        sync();
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         e.shiftKey ? step(redos, undos) : step(undos, redos);
       } else if ((e.key === '[' || e.key === ']') && TOOLS[tool]) {
         resize(e.key === ']');

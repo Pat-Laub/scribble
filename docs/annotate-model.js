@@ -23,6 +23,16 @@
     return stroke.w > 0 ? stroke.w : toolWidths[stroke.t];
   }
 
+  // Move through a finite palette without putting input-device behaviour in
+  // the annotation model. The browser UI uses this for a mouse wheel; a future
+  // presenter view can bind the same rule to whatever controls it exposes.
+  function cycleValue(values, current, direction) {
+    if (!values.length || !direction) return current;
+    var at = values.indexOf(current);
+    if (at < 0) at = 0;
+    return values[(at + (direction > 0 ? 1 : -1) + values.length) % values.length];
+  }
+
   // Older exports predate per-stroke widths. Capture the receiving device's
   // current rendering width once so the legacy ink keeps its appearance and
   // becomes deterministic from then on.
@@ -40,6 +50,7 @@
     pressureSample: pressureSample,
     isIPad: isIPad,
     strokeWidth: strokeWidth,
+    cycleValue: cycleValue,
     ensureStrokeWidths: ensureStrokeWidths
   };
 });

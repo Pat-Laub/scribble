@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { pressureSample, isIPad, strokeWidth, ensureStrokeWidths } = require('../annotate-model.js');
+const {
+  pressureSample, isIPad, strokeWidth, cycleValue, ensureStrokeWidths
+} = require('../annotate-model.js');
 
 test('recognises classic and desktop-mode iPads without classifying Macs', () => {
   assert.equal(isIPad({ userAgent: 'Mozilla/5.0 (iPad; CPU OS 12_5)', platform: 'iPad', maxTouchPoints: 5 }), true);
@@ -23,6 +25,14 @@ test('disabled stylus pressure produces a constant-width sample', () => {
 
 test('non-stylus input stays neutral for simulated pressure', () => {
   assert.equal(pressureSample(false, true, 0, 0.35, 0.75), 0.5);
+});
+
+test('palette cycling follows direction and wraps at both ends', () => {
+  const colours = ['black', 'red', 'blue'];
+  assert.equal(cycleValue(colours, 'black', 1), 'red');
+  assert.equal(cycleValue(colours, 'blue', 1), 'black');
+  assert.equal(cycleValue(colours, 'black', -1), 'blue');
+  assert.equal(cycleValue(colours, 'red', 0), 'red');
 });
 
 test('legacy strokes capture their current tool width exactly once', () => {

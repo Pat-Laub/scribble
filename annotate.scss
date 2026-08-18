@@ -162,7 +162,7 @@ $ink-button-size: 34px !default;
     display: flex;
   }
 
-  hr {
+  > hr {
     width: 22px;
     height: 1px;
     margin: 4px 0;
@@ -172,7 +172,8 @@ $ink-button-size: 34px !default;
 }
 
 .reveal .ink-btn,
-.reveal .ink-swatch {
+.reveal .ink-swatch,
+.reveal .ink-option {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -196,12 +197,79 @@ $ink-button-size: 34px !default;
   }
 }
 
-.reveal .ink-btn.active {
+.reveal .ink-btn.active,
+.reveal .ink-option.active {
   background: $ink-accent;
   color: #fff;
 }
 
-.reveal .ink-btn[disabled] {
+// Less-frequent and session-level controls live beside the writing rail. The
+// rail stays short and glanceable, while labels make this panel self-explanatory
+// when it is opened at the start of a lecture or for an occasional edit.
+.reveal .ink-more {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 8px);
+  transform: translateY(-50%);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 210px;
+  padding: 10px;
+  border-radius: 12px;
+  background: #fff;
+  color: $mainColor;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  font-size: 14px;
+
+  &[hidden] {
+    display: none;
+  }
+
+  hr {
+    width: 100%;
+    height: 1px;
+    margin: 6px 0;
+    border: 0;
+    background: rgba(0, 0, 0, 0.15);
+  }
+}
+
+.reveal .ink-more-title {
+  padding: 0 5px 4px;
+  color: rgba(0, 0, 0, 0.58);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-align: left;
+}
+
+.reveal .ink-width-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  .ink-nib {
+    flex: 1;
+  }
+}
+
+.reveal .ink-option {
+  justify-content: flex-start;
+  width: 100%;
+  height: 38px;
+  gap: 10px;
+  padding: 0 9px;
+  font: inherit;
+  white-space: nowrap;
+
+  svg {
+    flex: 0 0 20px;
+  }
+}
+
+.reveal .ink-btn[disabled],
+.reveal .ink-option[disabled] {
   opacity: 0.25;
   background: transparent;
   cursor: default;

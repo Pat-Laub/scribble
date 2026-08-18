@@ -49,6 +49,17 @@
     return points.map(function (p) { return [p[0] + dx, p[1] + dy, p[2]]; });
   }
 
+  // Convert a browser viewport point through the rendered slide rectangle.
+  // Points outside the rectangle deliberately remain outside the canvas; the
+  // annotation surface extends into Reveal's letterbox so strokes can begin at
+  // an edge without being clipped.
+  function pointFromRect(point, rect, width, height) {
+    return [
+      Math.round((point[0] - rect.left) / rect.width * width * 10) / 10,
+      Math.round((point[1] - rect.top) / rect.height * height * 10) / 10
+    ];
+  }
+
   function scalePoints(points, anchor, scale) {
     return points.map(function (p) {
       return [
@@ -95,6 +106,7 @@
     pointsBounds: pointsBounds,
     insideBounds: insideBounds,
     translatePoints: translatePoints,
+    pointFromRect: pointFromRect,
     scalePoints: scalePoints,
     resizeHandle: resizeHandle,
     uniformScale: uniformScale

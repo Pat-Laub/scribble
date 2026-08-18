@@ -141,6 +141,43 @@
     return true;
   }
 
+  // Safari used to report an overscanned SVG's negative inset but only its
+  // unexpanded width/height from getBoundingClientRect(). Points captured from
+  // that rectangle therefore became `3 * coordinate + 2 * canvasSize`. Detect
+  // the impossible median produced on either axis and restore that axis. The
+  // axes are independent because moving or continuing a selection may already
+  // have brought one of them back into ordinary slide coordinates.
+  function repairOverscanCoordinates(ink, canvas) {
+    var width = canvas && canvas.width, height = canvas && canvas.height;
+    if (!(width > 0 && height > 0)) return false;
+    var changed = false;
+    function median(values) {
+      values.sort(function (a, b) { return a - b; });
+      return values[Math.floor(values.length / 2)];
+    }
+    Object.keys(ink || {}).forEach(function (key) {
+      if (!Array.isArray(ink[key])) return;
+      var points = [];
+      ink[key].forEach(function (stroke) {
+        (stroke.p || []).forEach(function (point) {
+          if (isFinite(point[0]) && isFinite(point[1])) points.push(point);
+        });
+      });
+      if (!points.length) return;
+      var middleX = median(points.map(function (p) { return p[0]; }));
+      var middleY = median(points.map(function (p) { return p[1]; }));
+      var fixX = middleX > 2 * width || middleX < -width;
+      var fixY = middleY > 2 * height || middleY < -height;
+      if (!fixX && !fixY) return;
+      points.forEach(function (point) {
+        if (fixX) point[0] = Math.round((point[0] - 2 * width) / 3 * 10) / 10;
+        if (fixY) point[1] = Math.round((point[1] - 2 * height) / 3 * 10) / 10;
+      });
+      changed = true;
+    });
+    return changed;
+  }
+
   function nextItem(items, current) {
     var at = (items || []).indexOf(current);
     return at >= 0 && at + 1 < items.length ? items[at + 1] : null;
@@ -157,6 +194,7 @@
     slideKey: slideKey,
     migrateInkKeys: migrateInkKeys,
     reframeInk: reframeInk,
+    repairOverscanCoordinates: repairOverscanCoordinates,
     nextItem: nextItem
   };
 });

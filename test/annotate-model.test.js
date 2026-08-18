@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   pressureSample, isIPad, strokeWidth, cycleValue, ownsPointer, ensureStrokeWidths, cloneStrokes,
-  slideKey, migrateInkKeys, reframeInk, nextItem
+  slideKey, migrateInkKeys, reframeInk, repairOverscanCoordinates, nextItem
 } = require('../annotate-model.js');
 
 test('recognises classic and desktop-mode iPads without classifying Macs', () => {
@@ -118,6 +118,19 @@ test('legacy 16:10 ink is centred in the wider 16:9 canvas without distortion', 
   assert.deepEqual(ink['scribble-slide-001'][0].p, [[12, 100, 0.3], [1232, 650, 0.8]]);
   assert.equal(ink['scribble-slide-001'][0].w, 12.4);
   assert.equal(reframeInk(ink, { width: 1244, height: 700 }, { width: 1244, height: 700 }), false);
+});
+
+test('Safari overscan coordinates are repaired independently on each axis', () => {
+  const ink = {
+    first: [{ t: 'pen', p: [[2488, 1400, 0.4], [6220, 3500, 0.8]] }],
+    continued: [{ t: 'pen', p: [[3110, 64, 0.5], [4976, 700, 0.5]] }],
+    ordinary: [{ t: 'pen', p: [[100, 200, 0.5], [1100, 600, 0.5]] }]
+  };
+  assert.equal(repairOverscanCoordinates(ink, { width: 1244, height: 700 }), true);
+  assert.deepEqual(ink.first[0].p, [[0, 0, 0.4], [1244, 700, 0.8]]);
+  assert.deepEqual(ink.continued[0].p, [[207.3, 64, 0.5], [829.3, 700, 0.5]]);
+  assert.deepEqual(ink.ordinary[0].p, [[100, 200, 0.5], [1100, 600, 0.5]]);
+  assert.equal(repairOverscanCoordinates(ink, { width: 1244, height: 700 }), false);
 });
 
 test('next-slide lookup follows reveal order and stops at the final slide', () => {

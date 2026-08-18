@@ -30,7 +30,13 @@ $ink-button-size: 34px !default;
   // A deck's width and height either side of the slide, so the layer also
   // covers the letterbox the slide is scaled into: see OVERSCAN in annotate.js,
   // which this has to agree with, and which explains why.
-  inset: -100%;
+  // WebKit applies a negative SVG inset visually but can still report the
+  // element's original 100% dimensions. Explicit dimensions keep its layout,
+  // rendering and bounding box in agreement across browsers.
+  left: -100%;
+  top: -100%;
+  width: 300%;
+  height: 300%;
   overflow: visible;
   pointer-events: none;
   z-index: 13;
@@ -77,7 +83,10 @@ $ink-button-size: 34px !default;
 
 .reveal .ink-selection-layer {
   position: absolute;
-  inset: -100%;
+  left: -100%;
+  top: -100%;
+  width: 300%;
+  height: 300%;
   overflow: visible;
   pointer-events: none;
   z-index: 14;

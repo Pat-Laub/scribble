@@ -159,7 +159,7 @@
   var hovers = 0;            // consecutive hovering mouse moves; see hover()
   var sessionStarted = Date.now();
   var diagnostics = [];      // bounded, session-only input trace; exported with ink
-  var W, H, surface, panel, picker, guide, rulesPath, selectionLayer, selectionBox, saveTimer;
+  var W, H, slides, surface, panel, picker, guide, rulesPath, selectionLayer, selectionBox, saveTimer;
 
   /* ------------------------------ stroke maths --------------------------- */
 
@@ -410,6 +410,17 @@
     return changed;
   }
 
+  // Repair ink captured through WebKit's incorrect bounding box for the old
+  // negative-inset SVG layers. This is geometry-based and idempotent, so it
+  // also repairs a Safari export when it is imported in another browser.
+  function repairOverscanInk() {
+    var changed = AnnotationModel.repairOverscanCoordinates(ink, { width: W, height: H });
+    if (changed) {
+      try { localStorage.setItem(STORE, JSON.stringify(kept())); } catch (e) { /* full or blocked */ }
+    }
+    return changed;
+  }
+
   function readWidths() {
     var out = {}, saved;
     try { saved = JSON.parse(localStorage.getItem(WIDTH_STORE)); } catch (e) { /* unreadable */ }
@@ -580,6 +591,7 @@
       var imported = data.format === 'scribble-ink' && data.ink ? data.ink : data;
       ink = AnnotationModel.ensureStrokeWidths(imported, widths);
       migrateCanvasInk(data.format === 'scribble-ink' && data.canvas ? data.canvas : LEGACY_CANVAS);
+      repairOverscanInk();
       migrateSlideKeys();
       undos = {};  // the ink these described is not the ink that is here now
       redos = {};
@@ -611,6 +623,7 @@
     H = parseFloat(cfg.height) || 700;
     view = [-OVERSCAN * W, -OVERSCAN * H, (1 + 2 * OVERSCAN) * W, (1 + 2 * OVERSCAN) * H];
     migrateCanvasInk();
+    repairOverscanInk();
     var finished = false;
     function layOut() {
       if (finished) return true;
@@ -712,21 +725,17 @@
 
   /* ------------------------------- drawing ------------------------------- */
 
-  // Map a pointer event onto slide coordinates. Going through the rendered box
-  // keeps this correct under reveal's slide scaling and the zoom plugin's
-  // transform alike, and rounding keeps the stored JSON small. The box is the
-  // overscanned layer rather than the slide, so a point outside the slide maps
-  // outside [0, W] x [0, H] — which is what it is.
+  // Map a pointer event through Reveal's rendered slide rectangle. This stays
+  // correct under slide scaling and zoom, while a point in the surrounding
+  // letterbox naturally maps outside [0, W] x [0, H]. Do not measure the
+  // overscanned SVG: WebKit historically reported its negative offset but not
+  // its expanded dimensions, producing coordinates three times too large.
   function at(e) {
-    // Measured against the pen layer, not the surface: the layer is the thing
-    // inside `.slides` that reveal scales, so its box is what puts a point on
-    // the slide. The surface is only there to be touched.
-    var r = layers.pen.getBoundingClientRect();
-    return [
-      Math.round((view[0] + (e.clientX - r.left) / r.width * view[2]) * 10) / 10,
-      Math.round((view[1] + (e.clientY - r.top) / r.height * view[3]) * 10) / 10,
-      Math.round(force(e) * 100) / 100
-    ];
+    var point = AnnotationGeometry.pointFromRect(
+      [e.clientX, e.clientY], slides.getBoundingClientRect(), W, H
+    );
+    point.push(Math.round(force(e) * 100) / 100);
+    return point;
   }
 
   // Apple Pencil's light-writing range sits well below the middle of its raw
@@ -1468,7 +1477,7 @@
     // slide to come. Nothing in reveal looks at the first child or at previous
     // siblings, and the layers' `z-index` puts them above the slide content
     // regardless of document order.
-    var slides = document.querySelector('.reveal .slides');
+    slides = document.querySelector('.reveal .slides');
     guide = document.createElementNS(SVG_NS, 'svg');
     guide.setAttribute('class', 'ink-guide');
     guide.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
@@ -1709,6 +1718,7 @@
     H = parseFloat(cfg.height) || 700;
     view = [-OVERSCAN * W, -OVERSCAN * H, (1 + 2 * OVERSCAN) * W, (1 + 2 * OVERSCAN) * H];
     migrateCanvasInk();
+    repairOverscanInk();
     migrateSlideKeys();
     build();
     render();

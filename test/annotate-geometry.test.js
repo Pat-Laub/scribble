@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   rulePositions, pointInPolygon, polygonContainsPoints,
-  pointsBounds, insideBounds, translatePoints, scalePoints, resizeHandle, uniformScale
+  pointsBounds, insideBounds, translatePoints, pointFromRect, scalePoints, resizeHandle, uniformScale
 } = require('../annotate-geometry.js');
 
 test('ruled lines are evenly spaced and stay inside the requested margins', () => {
@@ -30,6 +30,12 @@ test('translating points retains their pressure samples', () => {
   assert.deepEqual(translatePoints([[1, 2, 0.4], [3, 5, 0.8]], 10, -2), [
     [11, 0, 0.4], [13, 3, 0.8]
   ]);
+});
+
+test('viewport points map through the slide rectangle without losing overscan', () => {
+  const rect = { left: 100, top: 50, width: 1244, height: 700 };
+  assert.deepEqual(pointFromRect([722, 400], rect, 1244, 700), [622, 350]);
+  assert.deepEqual(pointFromRect([50, 775], rect, 1244, 700), [-50, 725]);
 });
 
 test('selection resizing scales coordinates around a fixed corner and retains pressure', () => {

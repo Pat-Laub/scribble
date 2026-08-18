@@ -7,6 +7,7 @@ const {
 
 test('ruled lines are evenly spaced and stay inside the requested margins', () => {
   assert.deepEqual(rulePositions(700, 52, 64), [64, 116, 168, 220, 272, 324, 376, 428, 480, 532, 584, 636]);
+  assert.ok(rulePositions(700, 44, 64).length > rulePositions(700, 60, 64).length);
 });
 
 const loop = [[0, 0], [10, 0], [10, 10], [0, 10]];

@@ -254,6 +254,22 @@ $ink-button-size: 34px !default;
   }
 }
 
+.reveal .ink-rule-title {
+  padding-top: 5px;
+}
+
+.reveal .ink-rule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 3px;
+
+  .ink-rule-preview {
+    flex: 1;
+    color: rgba(38, 104, 199, 0.7);
+  }
+}
+
 .reveal .ink-option {
   justify-content: flex-start;
   width: 100%;

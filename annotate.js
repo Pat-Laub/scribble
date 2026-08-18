@@ -103,11 +103,12 @@
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var STORE = 'reveal-ink:' + location.pathname;
   var RULE_STORE = 'reveal-ink-rules';
+  var RULE_SPACING_STORE = 'reveal-ink-rule-spacing';
   var PRESSURE_STORE = 'reveal-ink-pressure';
   // Centre ordinary light Pencil writing near perfect-freehand's neutral 0.5
   // width, while retaining useful room on either side for pressure variation.
   var PRESSURE = { baseline: 0.35, scale: 0.75 };
-  var RULES = { spacing: 52, margin: 64 };
+  var RULES = { spacing: 52, min: 28, max: 92, step: 8, margin: 64 };
 
   /* -------------------------------- state -------------------------------- */
 
@@ -121,6 +122,7 @@
   var lastTool = 'pen';      // restored after temporarily hiding the tools
   var hidden = false;        // the ink is parked, showing the slide underneath
   var ruled = readRules();    // local view preference; never part of shared ink
+  var ruleSpacing = readRuleSpacing(); // presenter-local guide density
   var pressureEnabled = readPressure(); // captured into each new stroke's points
   var colour = COLOURS[0][1];
   var moreOpen = false;       // session controls expand beside the writing rail
@@ -145,7 +147,7 @@
   var pointers = false;      // pointer events arrive here, so touches are ignored
   var touching = null;       // identifier of the touch a stroke is being drawn with
   var hovers = 0;            // consecutive hovering mouse moves; see hover()
-  var W, H, surface, panel, picker, guide, selectionLayer, selectionBox, saveTimer;
+  var W, H, surface, panel, picker, guide, rulesPath, selectionLayer, selectionBox, saveTimer;
 
   /* ------------------------------ stroke maths --------------------------- */
 
@@ -372,6 +374,12 @@
     try { return localStorage.getItem(RULE_STORE) === 'true'; } catch (e) { return false; }
   }
 
+  function readRuleSpacing() {
+    var saved;
+    try { saved = parseFloat(localStorage.getItem(RULE_SPACING_STORE)); } catch (e) { /* blocked */ }
+    return isFinite(saved) ? Math.min(RULES.max, Math.max(RULES.min, saved)) : RULES.spacing;
+  }
+
   function readPressure() {
     try { return localStorage.getItem(PRESSURE_STORE) !== 'false'; } catch (e) { return true; }
   }
@@ -385,6 +393,20 @@
   function toggleRules() {
     ruled = !ruled;
     try { localStorage.setItem(RULE_STORE, ruled); } catch (e) { /* full or blocked */ }
+    sync();
+  }
+
+  function drawRules() {
+    rulesPath.setAttribute('d', AnnotationGeometry.rulePositions(H, ruleSpacing, RULES.margin)
+      .map(function (y) { return 'M' + RULES.margin + ' ' + y + 'H' + (W - RULES.margin); })
+      .join(' '));
+  }
+
+  function resizeRules(farther) {
+    ruleSpacing = Math.min(RULES.max, Math.max(RULES.min,
+      ruleSpacing + (farther ? RULES.step : -RULES.step)));
+    try { localStorage.setItem(RULE_SPACING_STORE, ruleSpacing); } catch (e) { /* full or blocked */ }
+    drawRules();
     sync();
   }
 
@@ -874,9 +896,9 @@
       'stroke-linecap="round" stroke-linejoin="round">' + ICONS[name] + '</svg>';
   }
 
-  function button(attr, name, title) {
+  function button(attr, name, title, iconName) {
     return '<button class="ink-btn" ' + attr + '="' + name + '" title="' + title + '">' +
-      icon(name) + '</button>';
+      icon(iconName || name) + '</button>';
   }
 
   function option(attr, name, label, title) {
@@ -994,6 +1016,13 @@
     act('redo').disabled = !(redos[key] || []).length;
     act('clear').disabled = !strokes().length;
     act('rules').classList.toggle('active', ruled);
+    act('rules-closer').disabled = !ruled || ruleSpacing <= RULES.min;
+    act('rules-farther').disabled = !ruled || ruleSpacing >= RULES.max;
+    var rulePreview = panel.querySelector('.ink-rule-preview');
+    var gap = 4 + (ruleSpacing - RULES.min) / (RULES.max - RULES.min) * 4;
+    rulePreview.querySelector('path').setAttribute('d',
+      'M8 ' + (11 - gap) + 'H44 M8 11H44 M8 ' + (11 + gap) + 'H44');
+    rulePreview.setAttribute('aria-label', 'Rule spacing: ' + ruleSpacing + ' slide units');
     act('pressure').classList.toggle('active', pressureEnabled);
     // Once lasso is chosen its labelled row is hidden with this panel; keep the
     // launcher lit so the compact rail still shows that a secondary tool is in
@@ -1018,10 +1047,8 @@
     guide = document.createElementNS(SVG_NS, 'svg');
     guide.setAttribute('class', 'ink-guide');
     guide.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-    var rulesPath = document.createElementNS(SVG_NS, 'path');
-    rulesPath.setAttribute('d', AnnotationGeometry.rulePositions(H, RULES.spacing, RULES.margin)
-      .map(function (y) { return 'M' + RULES.margin + ' ' + y + 'H' + (W - RULES.margin); })
-      .join(' '));
+    rulesPath = document.createElementNS(SVG_NS, 'path');
+    drawRules();
     guide.appendChild(rulesPath);
     slides.insertBefore(guide, slides.firstChild);
 
@@ -1134,6 +1161,13 @@
         '<hr>' +
         option('data-tool', 'select', 'Lasso and move') +
         option('data-act', 'rules', 'Ruled writing guides', 'Show/hide ruled writing guides (l)') +
+        '<div class="ink-more-title ink-rule-title">Rule spacing</div>' +
+        '<div class="ink-rule-row">' +
+          button('data-act', 'rules-closer', 'Move ruled lines closer together', 'thinner') +
+          '<svg class="ink-rule-preview" width="52" height="22" viewBox="0 0 52 22" ' +
+          'fill="none" stroke="currentColor" stroke-width="1.5" role="img"><path/></svg>' +
+          button('data-act', 'rules-farther', 'Move ruled lines farther apart', 'thicker') +
+        '</div>' +
         option('data-act', 'pressure', 'Pencil pressure', 'Apple Pencil pressure changes stroke width') +
         '<hr>' +
         option('data-act', 'clear', 'Clear this slide', 'Clear this slide (⇧ for the whole deck)') +
@@ -1191,6 +1225,8 @@
         clear(e.shiftKey);
       } else if (b.dataset.act === 'rules') {
         toggleRules();
+      } else if (b.dataset.act === 'rules-closer' || b.dataset.act === 'rules-farther') {
+        resizeRules(b.dataset.act === 'rules-farther');
       } else if (b.dataset.act === 'pressure') {
         togglePressure();
       } else if (b.dataset.act === 'more') {

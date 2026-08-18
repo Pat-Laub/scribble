@@ -103,6 +103,8 @@
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var STORE = 'reveal-ink:' + location.pathname;
   var RULE_STORE = 'reveal-ink-rules';
+  var PRESSURE_STORE = 'reveal-ink-pressure';
+  var PRESSURE_BOOST = 1.25;
   var RULES = { spacing: 52, margin: 64 };
 
   /* -------------------------------- state -------------------------------- */
@@ -115,6 +117,7 @@
   var lastTool = 'pen';      // restored after temporarily hiding the tools
   var hidden = false;        // the ink is parked, showing the slide underneath
   var ruled = readRules();    // local view preference; never part of shared ink
+  var pressureEnabled = readPressure(); // captured into each new stroke's points
   var colour = COLOURS[0][1];
   var live = null;           // { stroke, el } while a stroke is being drawn
   var erasing = false;       // an eraser drag is in progress
@@ -360,6 +363,16 @@
     try { return localStorage.getItem(RULE_STORE) === 'true'; } catch (e) { return false; }
   }
 
+  function readPressure() {
+    try { return localStorage.getItem(PRESSURE_STORE) !== 'false'; } catch (e) { return true; }
+  }
+
+  function togglePressure() {
+    pressureEnabled = !pressureEnabled;
+    try { localStorage.setItem(PRESSURE_STORE, pressureEnabled); } catch (e) { /* full or blocked */ }
+    sync();
+  }
+
   function toggleRules() {
     ruled = !ruled;
     try { localStorage.setItem(RULE_STORE, ruled); } catch (e) { /* full or blocked */ }
@@ -451,7 +464,7 @@
   // same number for the whole stroke, so it goes down the middle and
   // perfect-freehand is left to guess the width from the speed instead.
   function force(e) {
-    return stylus ? e.pressure * 1.25 : 0.5;
+    return AnnotationModel.pressureSample(stylus, pressureEnabled, e.pressure, PRESSURE_BOOST);
   }
 
   // The test for a device with pressure to give: it says it is a pen, or the
@@ -821,6 +834,7 @@
     highlighter: '<path d="M6.5 14.5l6-9.5 5.5 3.7-6.2 9.8H7.6z"/><path d="M4 21h16"/>',
     eraser: '<path d="M15.6 4.4l4 4a1.6 1.6 0 0 1 0 2.2l-7.5 7.5a1.6 1.6 0 0 1-2.2 0l-4-4a1.6 1.6 0 0 1 0-2.2l7.5-7.5a1.6 1.6 0 0 1 2.2 0z"/><path d="M9 20h11"/>',
     select: '<path d="M5.2 6.4c2.5-3 9.8-3 12.8.2 3.5 3.7.8 9.9-4.7 11.7-5.6 1.8-10.4-1.3-9.1-5.8.8-2.7 4.4-4.2 8.1-3.4" stroke-dasharray="2.5 2.5"/><path d="M16.5 16.5l3.5 3.5"/>',
+    pressure: '<path d="M4 16c2.2-5.3 4.7-8 7.5-8 3.2 0 5.8 3.3 8.5 10"/><circle cx="11.5" cy="8" r="2.2"/><path d="M4 20h16"/>',
     thinner: '<path d="M5 12h14"/>',
     thicker: '<path d="M12 5v14"/><path d="M5 12h14"/>',
     undo: '<path d="M4.5 9.5h10a4.5 4.5 0 0 1 0 9H9"/><path d="M8 5.5l-4 4 4 4"/>',
@@ -931,6 +945,7 @@
     act('redo').disabled = !(redos[key] || []).length;
     act('clear').disabled = !strokes().length;
     act('rules').classList.toggle('active', ruled);
+    act('pressure').classList.toggle('active', pressureEnabled);
   }
 
   function build() {
@@ -1048,6 +1063,7 @@
       'opacity="0.6"><title>How wide the tool in hand draws, in slide units</title>' +
       '<text x="17" y="12" text-anchor="middle" font-size="12"></text></svg>' +
       button('data-act', 'thicker', 'Thicker (])') +
+      button('data-act', 'pressure', 'Apple Pencil pressure changes stroke width') +
       '<hr>' +
       button('data-act', 'undo', 'Undo (⌘Z)') +
       button('data-act', 'redo', 'Redo (⇧⌘Z)') +
@@ -1106,6 +1122,8 @@
         clear(e.shiftKey);
       } else if (b.dataset.act === 'rules') {
         toggleRules();
+      } else if (b.dataset.act === 'pressure') {
+        togglePressure();
       } else if (b.dataset.act === 'download') {
         download();
       } else if (b.dataset.act === 'upload') {

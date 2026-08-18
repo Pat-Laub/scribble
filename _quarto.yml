@@ -20,11 +20,11 @@ format:
     # under ink.
     controls-back-arrows: visible
     navigation-mode: linear
-    # No swipe-to-advance: this is a writing surface, and a finger or the
-    # Apple Pencil dragging across the slide is how you draw — reveal would
-    # read that same drag as a page turn. Off touch navigation entirely; the
-    # arrow controls and keys still move between slides.
-    touch: false
+    # One-finger swipe navigation stays available. `palm-rejection.js` fixes a
+    # reveal pointer-event edge case where two separate palm contacts can be
+    # mistaken for one long swipe; Pencil strokes are intercepted separately by
+    # the annotation layer.
+    touch: true
     transition: none
     slide-number: c/t
     # The deck is the whole page — no scrollbars, no reveal "scroll view".

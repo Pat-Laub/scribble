@@ -1,6 +1,6 @@
-// Small, DOM-free annotation model helpers. The browser UI consumes this file,
-// while tests and a future multiplex transport can use the same rules without
-// depending on reveal.js.
+// Small, DOM-free annotation input/model helpers. The browser UI consumes this
+// file, while tests and a future multiplex transport can use the same rules
+// without depending on reveal.js.
 (function (root, factory) {
   var api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -8,6 +8,14 @@
 })(typeof window !== 'undefined' ? window : this, function () {
   function pressureSample(stylus, pressureEnabled, rawPressure, boost) {
     return stylus && pressureEnabled ? rawPressure * boost : 0.5;
+  }
+
+  // Since iPadOS 13, Safari can identify an iPad as a desktop-class Mac. A real
+  // Mac currently has no touch points, so the second half distinguishes them.
+  function isIPad(device) {
+    if (!device) return false;
+    return /iPad/i.test(device.userAgent || '') ||
+      (device.platform === 'MacIntel' && device.maxTouchPoints > 1);
   }
 
   function strokeWidth(stroke, toolWidths) {
@@ -29,6 +37,7 @@
 
   return {
     pressureSample: pressureSample,
+    isIPad: isIPad,
     strokeWidth: strokeWidth,
     ensureStrokeWidths: ensureStrokeWidths
   };

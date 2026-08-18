@@ -133,7 +133,10 @@
   var thinned = new WeakMap();// stroke -> its simplified points
   var layers = {};           // one SVG per drawing tool; see build()
   var view;                  // every layer's viewBox, in slide coordinates
-  var pen = false;           // a pen has been used, so fingers are not ink
+  // On an iPad this deck assumes an Apple Pencil is available, so fingers are
+  // navigation/palm input from the first touch. Elsewhere, touch and mouse can
+  // doodle until an actual pen is observed.
+  var pen = AnnotationModel.isIPad(navigator);
   var stylus = false;        // the stroke in hand has a pressure of its own
   var pointers = false;      // pointer events arrive here, so touches are ignored
   var touching = null;       // identifier of the touch a stroke is being drawn with

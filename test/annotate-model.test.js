@@ -1,6 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { pressureSample, strokeWidth, ensureStrokeWidths } = require('../annotate-model.js');
+const { pressureSample, isIPad, strokeWidth, ensureStrokeWidths } = require('../annotate-model.js');
+
+test('recognises classic and desktop-mode iPads without classifying Macs', () => {
+  assert.equal(isIPad({ userAgent: 'Mozilla/5.0 (iPad; CPU OS 12_5)', platform: 'iPad', maxTouchPoints: 5 }), true);
+  assert.equal(isIPad({ userAgent: 'Mozilla/5.0 (Macintosh)', platform: 'MacIntel', maxTouchPoints: 5 }), true);
+  assert.equal(isIPad({ userAgent: 'Mozilla/5.0 (Macintosh)', platform: 'MacIntel', maxTouchPoints: 0 }), false);
+  assert.equal(isIPad({ userAgent: 'Mozilla/5.0 (Windows)', platform: 'Win32', maxTouchPoints: 10 }), false);
+});
 
 test('enabled stylus pressure is retained with the configured boost', () => {
   assert.equal(pressureSample(true, true, 0.4, 1.25), 0.5);

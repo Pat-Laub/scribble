@@ -109,9 +109,11 @@
 
   /* -------------------------------- state -------------------------------- */
 
-  // A stroke is { t: tool, c: colour, s: simulate-pressure, p: [[x, y, pressure], ...] }.
-  var ink = read();          // { slideKey: [stroke, ...] }
-  var widths = readWidths(); // { tool: width }, as left by the panel's − and +
+  // A stroke is { t: tool, c: colour, w: width, s: simulate-pressure,
+  // p: [[x, y, pressure], ...] }. Everything that affects rendering travels
+  // with the stroke, so a viewer needs no copy of the presenter's tool state.
+  var widths = readWidths(); // active presets for the next stroke of each tool
+  var ink = AnnotationModel.ensureStrokeWidths(read(), widths);
   var undos = {}, redos = {};// { slideKey: [JSON snapshot, ...] }
   var tool = 'pen';          // this deck opens ready to write
   var lastTool = 'pen';      // restored after temporarily hiding the tools
@@ -146,7 +148,7 @@
     var o = TOOLS[stroke.t];
     if (stroke.s && o.simulated) o = o.simulated;
     var pts = getStroke(stroke.p, {
-      size: widths[stroke.t] * (o.share || 1),
+      size: AnnotationModel.strokeWidth(stroke, widths) * (o.share || 1),
       thinning: o.thinning, smoothing: o.smoothing,
       streamline: o.streamline, easing: o.easing,
       simulatePressure: stroke.s, last: !unfinished
@@ -176,7 +178,7 @@
   }
 
   function touches(stroke, x, y) {
-    var r = ERASER + widths[stroke.t] / 2, p = stroke.p;
+    var r = ERASER + AnnotationModel.strokeWidth(stroke, widths) / 2, p = stroke.p;
     for (var i = 0; i < p.length; i++) {
       if (segDist(x, y, p[i], p[i + 1] || p[i]) <= r) return true;
     }
@@ -383,16 +385,13 @@
     return Math.min(WIDTHS[t] * NIB.max, Math.max(WIDTHS[t] * NIB.min, w));
   }
 
-  // One press of − or +. The ink already on the slide is redrawn at the new
-  // width along with everything drawn from here on: the point of the control is
-  // to see what a width looks like, and writing that is already there is the
-  // fastest way to see it. Nothing about the strokes themselves changes, so
-  // stepping back down puts them back as they were.
+  // One press of − or + changes the preset for the next stroke only. Finished
+  // strokes carry their own width, just as they carry colour and pressure.
   function resize(up) {
     var w = widths[tool] * (up ? NIB.step : 1 / NIB.step);
     widths[tool] = clampWidth(tool, Math.round(w * 10) / 10);
     try { localStorage.setItem(WIDTH_STORE, JSON.stringify(widths)); } catch (e) { /* full or blocked */ }
-    render();
+    sync();
   }
 
   function save() {
@@ -430,7 +429,7 @@
       var data;
       try { data = JSON.parse(reader.result); } catch (e) { return; }
       if (!data || typeof data !== 'object') return;
-      ink = data;
+      ink = AnnotationModel.ensureStrokeWidths(data, widths);
       undos = {};  // the ink these described is not the ink that is here now
       redos = {};
       render();
@@ -618,7 +617,7 @@
     }
     if (tool === 'eraser') { erasing = true; marked = []; erase(p[0], p[1]); sync(); return; }
     snapshot();
-    var stroke = { t: tool, c: inkColour(), s: !stylus, p: [p] };
+    var stroke = { t: tool, c: inkColour(), w: widths[tool], s: !stylus, p: [p] };
     (ink[slideKey()] = ink[slideKey()] || []).push(stroke);
     live = { stroke: stroke, el: pathFor(stroke, true) };
     nodes.set(stroke, live.el);
@@ -1142,6 +1141,9 @@
     view = [-OVERSCAN * W, -OVERSCAN * H, (1 + 2 * OVERSCAN) * W, (1 + 2 * OVERSCAN) * H];
     build();
     render();
+    // Persist any legacy strokes that were assigned their current width during
+    // startup, before a later preset change could give them a different one.
+    save();
 
     Reveal.on('slidechanged', render);
     Reveal.on('overviewshown', function () { open(false); });  // one layer, one slide

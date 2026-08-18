@@ -20,6 +20,11 @@ format:
     # under ink.
     controls-back-arrows: visible
     navigation-mode: linear
+    # No swipe-to-advance: this is a writing surface, and a finger or the
+    # Apple Pencil dragging across the slide is how you draw — reveal would
+    # read that same drag as a page turn. Off touch navigation entirely; the
+    # arrow controls and keys still move between slides.
+    touch: false
     transition: none
     slide-number: c/t
     # The deck is the whole page — no scrollbars, no reveal "scroll view".

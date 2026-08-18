@@ -136,6 +136,7 @@
   var selected = [];         // strokes enclosed by the current lasso
   var lasso = null;          // { p, el } while a selection loop is being drawn
   var moving = null;         // original points while selected strokes are dragged
+  var clipboard = null;      // copied strokes survive slide changes for this session
   var nodes = new WeakMap(); // stroke -> its <path>, for the fade preview
   var thinned = new WeakMap();// stroke -> its simplified points
   var layers = {};           // one SVG per drawing tool; see build()
@@ -606,6 +607,50 @@
     if (selectionLayer) showSelection();
   }
 
+  function copySelection() {
+    if (!selected.length) return;
+    clipboard = {
+      source: slideKey(),
+      strokes: AnnotationModel.cloneStrokes(selected),
+      pastes: Object.create(null)
+    };
+    sync();
+  }
+
+  function pasteSelection() {
+    if (!clipboard || !clipboard.strokes.length) return;
+    if (activePointer !== null) finishGesture();
+    var key = slideKey();
+    var previous = clipboard.pastes[key] || 0;
+    // On the source slide, offset the first duplicate so it is visibly a copy.
+    // On another slide, preserve its exact position; repeated pastes there fan
+    // out slightly instead of landing invisibly on top of one another.
+    var offset = (previous + (key === clipboard.source ? 1 : 0)) * 18;
+    var copies = AnnotationModel.cloneStrokes(clipboard.strokes, offset, offset);
+    clipboard.pastes[key] = previous + 1;
+    snapshot(key);
+    ink[key] = (ink[key] || []).concat(copies);
+    tool = 'select';
+    moreOpen = false;
+    render();
+    selected = copies;
+    showSelection();
+    sync();
+    save();
+  }
+
+  function deleteSelection() {
+    if (!selected.length) return;
+    if (activePointer !== null) finishGesture();
+    var gone = selected.slice();
+    snapshot();
+    ink[slideKey()] = strokes().filter(function (stroke) {
+      return gone.indexOf(stroke) === -1;
+    });
+    render();
+    save();
+  }
+
   // Safari on iPadOS hands back samples it has already handed back: each
   // pointermove's coalesced batch opens with the whole of the batch the move
   // before it carried. Appending those walks the stroke back over itself and
@@ -959,6 +1004,8 @@
     highlighter: '<path d="M6.5 14.5l6-9.5 5.5 3.7-6.2 9.8H7.6z"/><path d="M4 21h16"/>',
     eraser: '<path d="M15.6 4.4l4 4a1.6 1.6 0 0 1 0 2.2l-7.5 7.5a1.6 1.6 0 0 1-2.2 0l-4-4a1.6 1.6 0 0 1 0-2.2l7.5-7.5a1.6 1.6 0 0 1 2.2 0z"/><path d="M9 20h11"/>',
     select: '<path d="M5.2 6.4c2.5-3 9.8-3 12.8.2 3.5 3.7.8 9.9-4.7 11.7-5.6 1.8-10.4-1.3-9.1-5.8.8-2.7 4.4-4.2 8.1-3.4" stroke-dasharray="2.5 2.5"/><path d="M16.5 16.5l3.5 3.5"/>',
+    copy: '<rect x="8" y="8" width="11" height="11" rx="1.5"/><path d="M16 8V5H5v11h3"/>',
+    paste: '<path d="M9 6h6v3H9z"/><path d="M8 7H6v13h12V7h-2"/><path d="M9 13h6M9 17h5"/>',
     pressure: '<path d="M4 16c2.2-5.3 4.7-8 7.5-8 3.2 0 5.8 3.3 8.5 10"/><circle cx="11.5" cy="8" r="2.2"/><path d="M4 20h16"/>',
     thinner: '<path d="M5 12h14"/>',
     thicker: '<path d="M12 5v14"/><path d="M5 12h14"/>',
@@ -978,7 +1025,8 @@
   }
 
   function button(attr, name, title, iconName) {
-    return '<button class="ink-btn" ' + attr + '="' + name + '" title="' + title + '">' +
+    return '<button class="ink-btn" ' + attr + '="' + name + '" title="' + title +
+      '" aria-label="' + title + '">' +
       icon(iconName || name) + '</button>';
   }
 
@@ -1096,6 +1144,9 @@
     act('undo').disabled = !(undos[key] || []).length;
     act('redo').disabled = !(redos[key] || []).length;
     act('clear').disabled = !strokes().length;
+    act('copy').disabled = !selected.length;
+    act('paste').disabled = !clipboard || !clipboard.strokes.length;
+    act('delete').disabled = !selected.length;
     act('rules').classList.toggle('active', ruled);
     act('rules-closer').disabled = !ruled || ruleSpacing <= RULES.min;
     act('rules-farther').disabled = !ruled || ruleSpacing >= RULES.max;
@@ -1108,6 +1159,8 @@
     act('more').classList.toggle('active', moreOpen);
     act('more').setAttribute('aria-expanded', moreOpen ? 'true' : 'false');
     panel.querySelector('.ink-more').hidden = !moreOpen || !on;
+    panel.querySelector('.ink-selection-actions').hidden =
+      tool !== 'select' || moreOpen || (!selected.length && !clipboard);
   }
 
   function build() {
@@ -1243,6 +1296,11 @@
       button('data-act', 'undo', 'Undo (⌘Z)') +
       button('data-act', 'redo', 'Redo (⇧⌘Z)') +
       button('data-act', 'more', 'More annotation options') +
+      '<div class="ink-selection-actions" role="group" aria-label="Selection actions" hidden>' +
+        button('data-act', 'copy', 'Copy selection (⌘C)') +
+        button('data-act', 'paste', 'Paste copied ink (⌘V)') +
+        button('data-act', 'delete', 'Delete selection (Delete)', 'clear') +
+      '</div>' +
       '<div class="ink-more" role="group" aria-label="Annotation options" hidden>' +
         '<div class="ink-more-title">Stroke width</div>' +
         '<div class="ink-width-row">' +
@@ -1318,6 +1376,12 @@
         step(undos, redos);
       } else if (b.dataset.act === 'redo') {
         step(redos, undos);
+      } else if (b.dataset.act === 'copy') {
+        copySelection();
+      } else if (b.dataset.act === 'paste') {
+        pasteSelection();
+      } else if (b.dataset.act === 'delete') {
+        deleteSelection();
       } else if (b.dataset.act === 'clear') {
         clear(e.shiftKey);
       } else if (b.dataset.act === 'rules') {
@@ -1368,8 +1432,18 @@
       if (e.key === 'Escape' && moreOpen) {
         moreOpen = false;
         sync();
+      } else if (e.key === 'Escape' && selected.length) {
+        clearSelection();
+        sync();
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         e.shiftKey ? step(redos, undos) : step(undos, redos);
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c' && selected.length) {
+        copySelection();
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v' && clipboard) {
+        pasteSelection();
+      } else if (tool === 'select' && selected.length &&
+                 (e.key === 'Delete' || e.key === 'Backspace')) {
+        deleteSelection();
       } else if ((e.key === '[' || e.key === ']') && TOOLS[tool]) {
         resize(e.key === ']');
       } else {

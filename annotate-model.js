@@ -54,12 +54,31 @@
     return ink;
   }
 
+  // Clipboard ink must share no objects with its source: moving a pasted copy
+  // must never tug the original along with it. Optional offsets are useful for
+  // making an in-place duplicate visible before it is dragged elsewhere.
+  function cloneStrokes(strokes, dx, dy) {
+    var copies = JSON.parse(JSON.stringify(strokes || []));
+    dx = dx || 0;
+    dy = dy || 0;
+    copies.forEach(function (stroke) {
+      stroke.p = (stroke.p || []).map(function (point) {
+        var moved = point.slice();
+        moved[0] += dx;
+        moved[1] += dy;
+        return moved;
+      });
+    });
+    return copies;
+  }
+
   return {
     pressureSample: pressureSample,
     isIPad: isIPad,
     strokeWidth: strokeWidth,
     cycleValue: cycleValue,
     ownsPointer: ownsPointer,
-    ensureStrokeWidths: ensureStrokeWidths
+    ensureStrokeWidths: ensureStrokeWidths,
+    cloneStrokes: cloneStrokes
   };
 });

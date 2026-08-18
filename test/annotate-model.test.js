@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  pressureSample, isIPad, strokeWidth, cycleValue, ownsPointer, ensureStrokeWidths
+  pressureSample, isIPad, strokeWidth, cycleValue, ownsPointer, ensureStrokeWidths, cloneStrokes
 } = require('../annotate-model.js');
 
 test('recognises classic and desktop-mode iPads without classifying Macs', () => {
@@ -57,4 +57,19 @@ test('legacy strokes capture their current tool width exactly once', () => {
   ensureStrokeWidths(ink, { pen: 20, highlighter: 100 });
   assert.equal(ink['0.0'][0].w, 12.4);
   assert.equal(strokeWidth(ink['0.0'][1], { highlighter: 100 }), 64);
+});
+
+test('clipboard strokes are independent copies with an optional position offset', () => {
+  const strokes = [{
+    t: 'pen', c: '#252525', w: 12.4, s: false,
+    p: [[10, 20, 0.4], [30, 40, 0.7]]
+  }];
+  const copies = cloneStrokes(strokes, 18, -5);
+
+  assert.deepEqual(copies[0].p, [[28, 15, 0.4], [48, 35, 0.7]]);
+  assert.notEqual(copies[0], strokes[0]);
+  assert.notEqual(copies[0].p[0], strokes[0].p[0]);
+
+  copies[0].p[0][0] = 999;
+  assert.equal(strokes[0].p[0][0], 10);
 });

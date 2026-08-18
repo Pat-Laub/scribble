@@ -1,7 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  pressureSample, isIPad, strokeWidth, cycleValue, ownsPointer, ensureStrokeWidths, cloneStrokes
+  pressureSample, isIPad, strokeWidth, cycleValue, ownsPointer, ensureStrokeWidths, cloneStrokes,
+  slideKey, migrateInkKeys
 } = require('../annotate-model.js');
 
 test('recognises classic and desktop-mode iPads without classifying Macs', () => {
@@ -72,4 +73,37 @@ test('clipboard strokes are independent copies with an optional position offset'
 
   copies[0].p[0][0] = 999;
   assert.equal(strokes[0].p[0][0], 10);
+});
+
+test('stable slide keys distinguish authored, generated, uncounted, and fragment states', () => {
+  const slide = (id, annotationId) => ({
+    id,
+    getAttribute: name => name === 'data-annotation-id' ? annotationId : null
+  });
+  assert.equal(slideKey(slide('generated-title', 'lecture-1-frame-004'), { h: 3, v: 0 }),
+    'lecture-1-frame-004');
+  assert.equal(slideKey(slide('solution-1'), { h: 4, v: 0 }), 'solution-1');
+  assert.equal(slideKey(slide('uncounted-replacement'), { h: 5, v: 0 }),
+    'uncounted-replacement');
+  // Reveal fragments do not create sections or new indices, so their key is
+  // deliberately the same section id before and after a fragment is shown.
+  assert.equal(slideKey(slide('worked-example'), { h: 6, v: 0 }), 'worked-example');
+  assert.equal(slideKey(slide('worked-example'), { h: 6, v: 0 }), 'worked-example');
+  assert.equal(slideKey(null, { h: 7, v: 2 }), '7.2');
+});
+
+test('index-keyed legacy ink migrates without losing distinct stable ink', () => {
+  const oldStroke = { t: 'pen', p: [[1, 2, 0.5]] };
+  const keptStroke = { t: 'pen', p: [[3, 4, 0.5]] };
+  const ink = {
+    '0.0': [oldStroke, keptStroke],
+    'scribble-slide-001': [keptStroke]
+  };
+
+  assert.equal(migrateInkKeys(ink, [
+    { stable: 'scribble-slide-001', legacy: '0.0' },
+    { stable: 'scribble-slide-002', legacy: '1.0' }
+  ]), true);
+  assert.equal(ink['0.0'], undefined);
+  assert.deepEqual(ink['scribble-slide-001'], [keptStroke, oldStroke]);
 });

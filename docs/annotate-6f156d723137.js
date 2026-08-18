@@ -306,11 +306,23 @@
 
   /* ------------------------------- the model ----------------------------- */
 
+  function slideKeyFor(slide) {
+    return AnnotationModel.slideKey(slide, slide && Reveal.getIndices(slide));
+  }
+
   function slideKey() {
-    var s = Reveal.getCurrentSlide();
-    if (!s) return '0.0';
-    var i = Reveal.getIndices(s);
-    return s.id || i.h + '.' + i.v;
+    return slideKeyFor(Reveal.getCurrentSlide());
+  }
+
+  function migrateSlideKeys() {
+    var mappings = Reveal.getSlides().map(function (slide) {
+      var indices = Reveal.getIndices(slide);
+      return {
+        stable: AnnotationModel.slideKey(slide, indices),
+        legacy: indices.h + '.' + indices.v
+      };
+    });
+    return AnnotationModel.migrateInkKeys(ink, mappings);
   }
 
   function strokes() { return ink[slideKey()] || []; }
@@ -500,7 +512,7 @@
     var name = (location.pathname.split('/').pop() || 'slides').replace(/\.html?$/, '');
     var payload = {
       format: 'scribble-ink',
-      version: 2,
+      version: 3,
       ink: kept(),
       diagnostics: diagnosticReport()
     };
@@ -523,6 +535,7 @@
       // support trace can travel in the same download without becoming ink.
       var imported = data.format === 'scribble-ink' && data.ink ? data.ink : data;
       ink = AnnotationModel.ensureStrokeWidths(imported, widths);
+      migrateSlideKeys();
       undos = {};  // the ink these described is not the ink that is here now
       redos = {};
       render();
@@ -1408,6 +1421,7 @@
     W = parseFloat(cfg.width) || 960;
     H = parseFloat(cfg.height) || 700;
     view = [-OVERSCAN * W, -OVERSCAN * H, (1 + 2 * OVERSCAN) * W, (1 + 2 * OVERSCAN) * H];
+    migrateSlideKeys();
     build();
     render();
     // Persist any legacy strokes that were assigned their current width during

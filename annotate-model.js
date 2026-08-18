@@ -72,6 +72,45 @@
     return copies;
   }
 
+  // A deliberately authored annotation id is strongest. A normal section id
+  // is next (Quarto gives every titled slide one), and reveal's h/v indices
+  // remain only as a compatibility fallback for old or headingless decks.
+  // Uncounted slides are still distinct sections; fragment animations remain
+  // on one section and therefore correctly share one key.
+  function slideKey(slide, indices) {
+    if (slide) {
+      var explicit = slide.getAttribute && slide.getAttribute('data-annotation-id');
+      if (explicit) return explicit;
+      if (slide.id) return slide.id;
+    }
+    indices = indices || {};
+    return (isFinite(indices.h) ? indices.h : 0) + '.' +
+      (isFinite(indices.v) ? indices.v : 0);
+  }
+
+  // Move index-keyed ink written by older versions onto stable slide ids.
+  // If both keys contain ink, retain every distinct stroke rather than making
+  // migration choose which set deserves to survive.
+  function migrateInkKeys(ink, mappings) {
+    var changed = false;
+    (mappings || []).forEach(function (mapping) {
+      var stable = mapping && mapping.stable;
+      var legacy = mapping && mapping.legacy;
+      if (!stable || !legacy || stable === legacy || !Array.isArray(ink[legacy])) return;
+      var target = Array.isArray(ink[stable]) ? ink[stable] : [];
+      var seen = Object.create(null);
+      target.forEach(function (stroke) { seen[JSON.stringify(stroke)] = true; });
+      ink[legacy].forEach(function (stroke) {
+        var signature = JSON.stringify(stroke);
+        if (!seen[signature]) { target.push(stroke); seen[signature] = true; }
+      });
+      ink[stable] = target;
+      delete ink[legacy];
+      changed = true;
+    });
+    return changed;
+  }
+
   return {
     pressureSample: pressureSample,
     isIPad: isIPad,
@@ -79,6 +118,8 @@
     cycleValue: cycleValue,
     ownsPointer: ownsPointer,
     ensureStrokeWidths: ensureStrokeWidths,
-    cloneStrokes: cloneStrokes
+    cloneStrokes: cloneStrokes,
+    slideKey: slideKey,
+    migrateInkKeys: migrateInkKeys
   };
 });

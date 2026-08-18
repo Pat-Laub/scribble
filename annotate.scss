@@ -199,6 +199,14 @@ $ink-button-size: 34px !default;
   &.drawing.ink-text-mode.ink-hover {
     cursor: text;
   }
+
+  &.drawing.ink-text-mode.ink-text-target {
+    cursor: grab;
+  }
+
+  &.drawing.ink-text-mode.ink-text-dragging {
+    cursor: grabbing;
+  }
 }
 
 // The only live HTML in a text annotation. It is fixed to the rendered slide

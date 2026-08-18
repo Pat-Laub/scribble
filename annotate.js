@@ -111,7 +111,7 @@
   // width, while retaining useful room on either side for pressure variation.
   var PRESSURE = { enabledByDefault: true, baseline: 0.35, scale: 0.75 };
   var RULES = { spacing: 52, min: 28, max: 92, step: 8, margin: 64 };
-  var TEXT = { size: 34, width: 360, lineHeight: 1.25, padding: 0.16 };
+  var TEXT = { size: 34, width: 360, lineHeight: 1.25, padding: 0.16, dragThreshold: 6 };
 
   /* -------------------------------- state -------------------------------- */
 
@@ -139,6 +139,7 @@
   var lasso = null;          // { p, el } while a selection loop is being drawn
   var moving = null;         // original points while selected strokes are dragged
   var resizing = null;       // fixed corner and originals while selection scales
+  var textMoving = null;     // pending tap, or direct drag, on committed text
   var editing = null;        // in-place textarea and its uncommitted text-box draft
   var clipboard = null;      // copied strokes survive slide changes for this session
   var nodes = new WeakMap(); // annotation -> its SVG element
@@ -1141,7 +1142,7 @@
   function ours(e) {
     if (!tool) return false;
     // Mid-stroke everything is ours, wherever the tip has wandered to.
-    if (live || erasing || lasso || moving || resizing || touching !== null) return true;
+    if (live || erasing || lasso || moving || resizing || textMoving || touching !== null) return true;
     var t = e.target;
     return !!t && (!t.closest || !t.closest(CHROME));
   }
@@ -1199,8 +1200,17 @@
     stylus = isStylus(e);
     var p = at(e);
     if (tool === 'text') {
-      activePointer = null;
-      editText(p);
+      if (editing) finishText(true);
+      var textTarget = textAt(p);
+      if (textTarget) {
+        textMoving = {
+          key: slideKey(), target: textTarget, start: p,
+          original: textTarget.p.map(function (q) { return q.slice(); }), moved: false
+        };
+      } else {
+        activePointer = null;
+        editText(p);
+      }
       sync();
       return;
     }
@@ -1257,20 +1267,23 @@
   // button held — where a pen contact produces at most a stray one, so two in a
   // row is the difference between them. Pens and fingers never bring it back.
   function hover(e) {
-    if (e.pointerType !== 'mouse' || e.buttons || hovers >= 2) return;
+    if (e.pointerType !== 'mouse' || e.buttons) return;
+    if (tool === 'text') surface.classList.toggle('ink-text-target', !!textAt(at(e)));
+    if (hovers >= 2) return;
     if (++hovers === 2) surface.classList.add('ink-hover');
   }
 
   function unhover() {
     hovers = 0;
     surface.classList.remove('ink-hover');
+    surface.classList.remove('ink-text-target');
   }
 
   function move(e) {
-    if ((live || erasing || lasso || moving || resizing) &&
+    if ((live || erasing || lasso || moving || resizing || textMoving) &&
         !AnnotationModel.ownsPointer(activePointer, e.pointerId)) return;
     hover(e);
-    if (!live && !erasing && !lasso && !moving && !resizing) return;
+    if (!live && !erasing && !lasso && !moving && !resizing && !textMoving) return;
     // Reveal navigates on a pointer drag as well as on a touch swipe, and it
     // reads every move, not just the ones that follow a pointerdown it saw. A
     // stroke is not a swipe, so the moves that make it up stop here.
@@ -1281,6 +1294,22 @@
       if (!loopPoints.length) return;
       lasso.p = lasso.p.concat(loopPoints);
       lasso.el.setAttribute('d', lassoData(lasso.p));
+      return;
+    }
+    if (textMoving) {
+      var textHere = at(e);
+      var textDx = textHere[0] - textMoving.start[0];
+      var textDy = textHere[1] - textMoving.start[1];
+      if (!textMoving.moved && Math.hypot(textDx, textDy) < TEXT.dragThreshold) return;
+      if (!textMoving.moved) {
+        snapshot(textMoving.key);
+        textMoving.moved = true;
+        sync();
+      }
+      textMoving.target.p = AnnotationGeometry.translatePoints(
+        textMoving.original, textDx, textDy
+      );
+      updateElement(textMoving.target);
       return;
     }
     if (moving) {
@@ -1379,7 +1408,7 @@
 
   function finishGesture() {
     activePointer = null;
-    var drawn = live || erasing || lasso || moving || resizing;
+    var drawn = live || erasing || lasso || moving || resizing || textMoving;
     unhover();  // a lifted pen leaves no cursor behind; a mouse moves on
     if (lasso) {
       selected = strokes().filter(function (s) {
@@ -1396,6 +1425,12 @@
       resizing = null;
       showSelection();
       save();
+    } else if (textMoving) {
+      var textSession = textMoving;
+      textMoving = null;
+      if (textSession.moved) save();
+      else editText(textSession.start);
+      sync();
     } else if (erasing) {
       erasing = false;
       if (marked.length) rub();
@@ -1414,7 +1449,7 @@
 
   function up(e) {
     if (!AnnotationModel.ownsPointer(activePointer, e.pointerId)) return;
-    var drawn = live || erasing || lasso || moving || resizing;
+    var drawn = live || erasing || lasso || moving || resizing || textMoving;
     if (drawn) e.stopPropagation();
     finishGesture();
   }
@@ -1641,6 +1676,8 @@
     panel.classList.toggle('active', on);
     surface.classList.toggle('drawing', on);
     surface.classList.toggle('ink-text-mode', tool === 'text');
+    surface.classList.toggle('ink-text-dragging', !!textMoving && textMoving.moved);
+    if (tool !== 'text') surface.classList.remove('ink-text-target');
     Object.keys(layers).forEach(function (t) {
       layers[t].classList.toggle('ink-hidden', hidden);
     });

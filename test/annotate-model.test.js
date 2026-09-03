@@ -136,3 +136,15 @@ test('a dropped point is reported, so a live path knows to redraw', () => {
   assert.equal(added.added, 1);
   assert.equal(added.dropped, 1);
 });
+
+// Multiplexing sends a stroke down a wire as it is drawn, so the presenter has
+// to know which samples were actually kept -- the thinning decides that, and a
+// count alone does not say which points to send.
+test('appending reports the samples it kept, not only how many', () => {
+  const p = [[0, 0, 0.5]];
+  const result = appendSamples(p, [[0.1, 0, 0.5], [4, 0, 0.5], [8, 0, 0.5]]);
+  assert.ok(Array.isArray(result.kept), 'no kept points were reported');
+  assert.equal(result.kept.length, result.added);
+  // What was kept is exactly what the stroke grew by, in order.
+  assert.deepEqual(result.kept, p.slice(p.length - result.kept.length));
+});

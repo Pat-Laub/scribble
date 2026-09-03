@@ -95,11 +95,13 @@
 
   // Appends a batch of fresh samples to `points` in place, since a stroke is
   // added to on every frame of it and copying the whole array to do that is the
-  // growing cost the thinning above is meant to avoid. Reports how many samples
-  // were kept and how many already-held points the thinning took back.
+  // growing cost the thinning above is meant to avoid. Reports the samples it
+  // kept, how many they are, and how many already-held points the thinning took
+  // back -- a window watching this stroke over a wire needs all three: drop
+  // `dropped` from its end, then append `kept`.
   function appendSamples(points, batch, options) {
     var o = options || SAMPLING;
-    var added = 0, dropped = 0;
+    var kept = [], dropped = 0;
     for (var i = 0; i < batch.length; i++) {
       var q = batch[i], prev = points[points.length - 1];
       if (seenRecently(points, q, o.repeat)) continue;
@@ -111,9 +113,9 @@
         dropped++;
       }
       points.push(q);
-      added++;
+      kept.push(q);
     }
-    return { added: added, dropped: dropped };
+    return { kept: kept, added: kept.length, dropped: dropped };
   }
 
   // A deliberately authored annotation id is strongest. A normal section id

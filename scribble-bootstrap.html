@@ -1,3 +1,12 @@
+<!-- Installing the deck to the iPad Home Screen exempts it from Safari's
+     seven-day eviction of script-writable storage, which otherwise discards
+     the annotations in localStorage after a week without a visit. -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png" type="image/png">
+<meta name="apple-mobile-web-app-title" content="Scribble">
+<meta name="theme-color" content="#ffffff">
+
 <script>
 // Reveal may normalise an as-yet unbuilt dynamic slide hash to page one during
 // startup. Capture the requested page before Reveal initialises.

@@ -2,6 +2,11 @@ project:
   type: default
   # Committed to git so GitHub Pages can serve the deck straight from docs/.
   output-dir: docs
+  resources:
+    - manifest.webmanifest
+    - icon-192.png
+    - icon-512.png
+    - apple-touch-icon.png
   post-render:
     # Give Safari a new URL whenever annotation code changes. The generated
     # filenames use content hashes, matching Quarto's treatment of its CSS.

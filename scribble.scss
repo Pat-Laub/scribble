@@ -23,12 +23,6 @@ $linkColorHover: #7089ef;
 $ink-accent: #4465e9;
 // The corner launchers read this; keep them on the pad's own accent.
 $link-color: #4465e9;
-$ink-panel-width: 132px;
-$ink-button-size: 102px;
-// The corner row is tapped with a finger; 168 authored px is the 44pt Apple
-// asks for once the canvas is scaled to an iPad.
-$ink-launcher-size: 168px;
-$ink-launcher-icon: 120px;
 
 /*-- scss:rules --*/
 

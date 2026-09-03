@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   pageId, pageNumber, normalisePageIds, requiredPageCount, install
-} = require('../scribble-pages.js');
+} = require('../_extensions/Pat-Laub/scribble/scribble-pages.js');
 
 test('dynamic pages retain stable, explicitly numbered slide IDs', () => {
   assert.equal(pageId(1), 'scribble-slide-001');

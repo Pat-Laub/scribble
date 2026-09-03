@@ -25,7 +25,7 @@ format:
     # a `title` would bring back the title slide this deck does without —
     # without one Quarto names the tab after the file, i.e. "index".
     pagetitle: Scribble
-    theme: [white, scribble.scss, annotate.scss]
+    theme: [white, scribble.scss, _extensions/Pat-Laub/scribble/annotate.scss]
     controls: true
     # Keep both arrows in the bottom-right corner, clear of the drawing tools.
     controls-layout: bottom-right
@@ -49,8 +49,13 @@ format:
     # stage's content insets to match; the two have to agree.
     width: 3744
     height: 2106
-    # `reveal-fixes.html` loads the MIT-licensed freehand annotation tool.
-    # Ink is saved per slide in the browser's localStorage and can be exported.
-    # It is appended after the extension's own includes.
+    # The MIT-licensed freehand annotation tool. Ink is saved per slide in the
+    # browser's localStorage and can be exported. The reveal.js fixes it used to
+    # be bundled with now come from the slide-stage extension.
+    revealjs-plugins:
+      - scribble
+    scribble:
+      # This deck is the pad: growing a page by navigating past the last one is
+      # the point here, and off everywhere else.
+      pages: true
     include-in-header: scribble-bootstrap.html
-    include-after-body: reveal-fixes.html

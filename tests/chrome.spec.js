@@ -47,3 +47,23 @@ test('the tool icons are large enough to read', async ({ page }) => {
     expect(icon.h, 'a tool icon is too small to read').toBeGreaterThan(14);
   }
 });
+
+// C takes the corner buttons away when they are in the way, and puts them back.
+// ACTL2131's copy of the engine has this; the shared one needs it before that
+// deck can drop its fork, and a multiplexed viewer relies on it to show nothing
+// on a projected screen.
+test('C hides and shows the corner buttons', async ({ page }) => {
+  await openPad(page);
+  const row = page.locator('.ink-launchers');
+  await expect(row).toBeVisible();
+
+  await page.keyboard.press('c');
+  await expect(row).toBeHidden();
+  await expect.poll(() => page.evaluate(() =>
+    document.documentElement.classList.contains('ink-chrome-off'))).toBe(true);
+
+  await page.keyboard.press('c');
+  await expect(row).toBeVisible();
+  await expect.poll(() => page.evaluate(() =>
+    document.documentElement.classList.contains('ink-chrome-on'))).toBe(true);
+});

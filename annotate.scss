@@ -551,3 +551,9 @@ $ink-button-size: 34px !default;
     display: none !important;
   }
 }
+
+// The scroll view is disabled in annotate.js; drop its menu entry too.
+.slide-menu-item:has(a[onclick*="toggleScrollView"]),
+.slide-tool-item:has(a[onclick*="toggleScrollView"]) {
+  display: none;
+}

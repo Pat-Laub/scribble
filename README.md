@@ -15,6 +15,39 @@ The writing canvas is 16:9 so its visible left and right edges agree with Overvi
 
 Choose **Download annotated PDF** in the options to save a vector PDF directly. Its pages retain the deck's 16:9 shape without depending on the browser's paper-size settings; pen and highlighter strokes remain sharp, and enabled ruled guides use their current spacing on every page. If direct PDF creation is unavailable, the app falls back to Reveal's print view and the browser's PDF dialog.
 
+## Keyboard shortcuts
+
+The full set, as of the bindings in `annotate.js`, `scribble-pages.js` and
+`reveal-fixes.html`. The drawing tools are always open, so the annotation keys
+are always live.
+
+| Key | Does |
+| --- | --- |
+| <kbd>V</kbd> | Hide/show the annotations |
+| <kbd>R</kbd> | Show/hide the ruled writing guides |
+| <kbd>[</kbd> / <kbd>]</kbd> | Shrink/grow the current tool |
+| <kbd>Cmd/Ctrl</kbd>+<kbd>Z</kbd>, +<kbd>Shift</kbd> | Undo / redo |
+| <kbd>Cmd/Ctrl</kbd>+<kbd>C</kbd> / <kbd>V</kbd> | Copy / paste the selection |
+| <kbd>Cmd/Ctrl</kbd>+<kbd>Enter</kbd> | Continue the selection onto the next slide; also finishes a text box |
+| <kbd>Delete</kbd> / <kbd>Backspace</kbd> | Delete the selection (lasso tool) |
+| <kbd>Esc</kbd> | Close the ••• tray, then clear the selection; in a text box, discard it |
+| <kbd>N</kbd> / <kbd>Space</kbd> / <kbd>→</kbd> / <kbd>↓</kbd> | Next slide, appending a fresh blank page at the end |
+| Alt/Option-click | Magnify, and again to come back |
+| Arrows *while magnified* | Pan the magnified view; <kbd>Shift</kbd> for a bigger step |
+
+Navigation is `linear`, so <kbd>L</kbd> and <kbd>J</kbd> go forward with
+<kbd>N</kbd>, and <kbd>H</kbd> and <kbd>K</kbd> go back with <kbd>P</kbd>. The
+rest of reveal and Quarto is untouched: <kbd>B</kbd> or <kbd>.</kbd> pauses,
+<kbd>O</kbd> or <kbd>Esc</kbd> opens the overview, <kbd>F</kbd> is fullscreen,
+<kbd>G</kbd> jumps to a slide, <kbd>M</kbd> opens the menu, <kbd>E</kbd> is PDF
+export mode, <kbd>S</kbd> the speaker view, <kbd>?</kbd> reveal's help.
+
+Quarto's `quarto-support` plugin puts its **scroll view** on <kbd>R</kbd> and
+drops into it by itself on a viewport under 435px. That view abandons the fixed
+16:9 writing surface, so `annotate.js` removes the binding
+(`Reveal.removeKeyBinding(82)`), sets `scrollActivationWidth: null`, and
+`annotate.scss` hides the matching menu entry. <kbd>R</kbd> is ours.
+
 ## Rendering
 
 ```sh

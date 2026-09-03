@@ -2051,6 +2051,11 @@
       clearOverview();
       open(true);
     });
+    // Quarto's support plugin binds R to its scroll view and lets reveal fall
+    // into it on a narrow viewport; both break a fixed stage you write on.
+    Reveal.removeKeyBinding(82);
+    Reveal.configure({ scrollActivationWidth: null });
+
     Reveal.addKeyBinding(
       { keyCode: 86, key: 'V', description: 'Hide/show the annotations' },
       function () { hide(!hidden); }

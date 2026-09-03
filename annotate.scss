@@ -240,19 +240,19 @@ $ink-button-size: 34px !default;
   flex-direction: column;
   align-items: center;
   width: $ink-panel-width;
-  padding: 5px 0;
-  border-radius: 12px;
+  padding: 15px 0;
+  border-radius: 36px;
   background: #fff;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 6px 36px rgba(0, 0, 0, 0.25);
 
   &.active {
     display: flex;
   }
 
   > hr {
-    width: 22px;
-    height: 1px;
-    margin: 4px 0;
+    width: 66px;
+    height: 3px;
+    margin: 12px 0;
     border: 0;
     background: rgba(0, 0, 0, 0.15);
   }
@@ -268,7 +268,7 @@ $ink-button-size: 34px !default;
   height: $ink-button-size;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 24px;
   background: transparent;
   color: $mainColor;
   cursor: pointer;
@@ -279,8 +279,8 @@ $ink-button-size: 34px !default;
   }
 
   svg {
-    width: 20px;
-    height: 20px;
+    width: 60px;
+    height: 60px;
   }
 }
 
@@ -296,18 +296,18 @@ $ink-button-size: 34px !default;
 .deck-stage .ink-more {
   position: absolute;
   top: 50%;
-  right: calc(100% + 8px);
+  right: calc(100% + 24px);
   transform: translateY(-50%);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  width: 210px;
-  padding: 10px;
-  border-radius: 12px;
+  width: 630px;
+  padding: 30px;
+  border-radius: 36px;
   background: #fff;
   color: $mainColor;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
-  font-size: 14px;
+  box-shadow: 0 6px 36px rgba(0, 0, 0, 0.25);
+  font-size: 42px;
 
   &[hidden] {
     display: none;
@@ -315,8 +315,8 @@ $ink-button-size: 34px !default;
 
   hr {
     width: 100%;
-    height: 1px;
-    margin: 6px 0;
+    height: 3px;
+    margin: 18px 0;
     border: 0;
     background: rgba(0, 0, 0, 0.15);
   }
@@ -328,14 +328,14 @@ $ink-button-size: 34px !default;
 .deck-stage .ink-selection-actions {
   position: absolute;
   top: 50%;
-  right: calc(100% + 8px);
+  right: calc(100% + 24px);
   transform: translateY(-50%);
   display: flex;
-  gap: 2px;
-  padding: 5px;
-  border-radius: 12px;
+  gap: 6px;
+  padding: 15px;
+  border-radius: 36px;
   background: #fff;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 6px 36px rgba(0, 0, 0, 0.25);
 
   &[hidden] {
     display: none;
@@ -343,9 +343,9 @@ $ink-button-size: 34px !default;
 }
 
 .deck-stage .ink-more-title {
-  padding: 0 5px 4px;
+  padding: 0 15px 12px;
   color: rgba(0, 0, 0, 0.58);
-  font-size: 12px;
+  font-size: 36px;
   font-weight: 600;
   letter-spacing: 0.02em;
   text-align: left;
@@ -362,14 +362,14 @@ $ink-button-size: 34px !default;
 }
 
 .deck-stage .ink-rule-title {
-  padding-top: 5px;
+  padding-top: 15px;
 }
 
 .deck-stage .ink-rule-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 3px;
+  padding-bottom: 9px;
 
   .ink-rule-preview {
     flex: 1;
@@ -380,14 +380,14 @@ $ink-button-size: 34px !default;
 .deck-stage .ink-option {
   justify-content: flex-start;
   width: 100%;
-  height: 38px;
-  gap: 10px;
-  padding: 0 9px;
+  height: 114px;
+  gap: 30px;
+  padding: 0 27px;
   font: inherit;
   white-space: nowrap;
 
   svg {
-    flex: 0 0 20px;
+    flex: 0 0 60px;
   }
 }
 
@@ -402,21 +402,45 @@ $ink-button-size: 34px !default;
 // annotate.js, so the dot and its selection ring both just use currentColor.
 .deck-stage .ink-swatch::before {
   content: "";
-  width: 17px;
-  height: 17px;
+  width: 51px;
+  height: 51px;
   border-radius: 50%;
   background: currentColor;
 }
 .deck-stage .ink-swatch.active::before {
-  box-shadow: 0 0 0 3px #fff, 0 0 0 5px currentColor;
+  box-shadow: 0 0 0 9px #fff, 0 0 0 15px currentColor;
 }
 
 // The full-screen button continues reveal's bottom-left menu control. Both use
 // the same bottom offset, so their icon boxes share a baseline.
+// Quarto's hamburger is a separate fixed element that it sizes for a browser
+// page, not for this canvas, so on the stage it comes out a fraction of the
+// launchers beside it. Give it the same origin and the same box.
+.reveal .slide-menu-button {
+  position: fixed !important;
+  left: 24px !important;
+  bottom: 24px !important;
+  width: $ink-launcher-size;
+  height: $ink-launcher-size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  // The bars are not an icon font: Quarto draws them as a background image on
+  // `::before`, boxed at 1rem, so `font-size` leaves them alone and the box has
+  // to be set directly.
+  i.fas::before,
+  i::before {
+    width: $ink-launcher-icon;
+    height: $ink-launcher-icon;
+    background-size: $ink-launcher-icon $ink-launcher-icon;
+  }
+}
+
 .deck-stage > .ink-launchers {
   // In authored page units, like the panel. A rem here would follow the deck's
-  // 84px root size rather than the button's own scale.
-  --ink-button: 168px;
+  // root font size rather than the button's own scale.
+  --ink-button: #{$ink-launcher-size};
 
   position: absolute;
   left: 24px;
@@ -447,7 +471,7 @@ $ink-button-size: 34px !default;
   svg {
     width: 80%;
     height: 80%;
-    transform: translateY(-2px);
+    transform: translateY(-6px);
   }
 }
 

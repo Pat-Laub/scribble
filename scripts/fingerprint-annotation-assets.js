@@ -6,10 +6,10 @@ const path = require('node:path');
 // deck; it hashes its own CSS but not these, so Safari will happily keep a
 // week-old annotate.js. The vendored library is left alone: it changes only
 // when it is deliberately replaced.
-const PLUGIN_SUFFIX = path.join('libs', 'revealjs', 'plugin', 'scribble');
+const PLUGIN_SUFFIX = path.join('libs', 'revealjs', 'plugin', 'annotate');
 
 const ASSETS = [
-  'scribble-pages.js',
+  'annotate-pages.js',
   'palm-rejection.js',
   'annotate-geometry.js',
   'annotate-model.js',

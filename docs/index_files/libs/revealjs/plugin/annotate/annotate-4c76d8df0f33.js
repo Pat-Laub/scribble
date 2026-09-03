@@ -524,7 +524,7 @@
   }
 
   function deletePage() {
-    if (!window.ScribblePages || !ScribblePages.canRemove()) return;
+    if (!window.AnnotatePages || !AnnotatePages.canRemove()) return;
     if (!confirm('Delete this page and all of its annotations? This cannot be undone.')) return;
     if (activePointer !== null) finishGesture();
     if (editing) finishText(true);
@@ -533,7 +533,7 @@
     delete undos[key];
     delete redos[key];
     save();
-    ScribblePages.removeCurrent();
+    AnnotatePages.removeCurrent();
     sync();
   }
 
@@ -710,8 +710,8 @@
       format: 'scribble-ink',
       version: 6,
       canvas: { width: W, height: H },
-      pages: window.ScribblePages ? ScribblePages.count() : Reveal.getTotalSlides(),
-      pageIds: window.ScribblePages ? ScribblePages.ids() : undefined,
+      pages: window.AnnotatePages ? AnnotatePages.count() : Reveal.getTotalSlides(),
+      pageIds: window.AnnotatePages ? AnnotatePages.ids() : undefined,
       ink: kept(),
       diagnostics: diagnosticReport()
     };
@@ -732,10 +732,10 @@
         return;
       }
       ink = data.ink;
-      if (window.ScribblePages) {
-        if (Array.isArray(data.pageIds)) ScribblePages.ensureIds(data.pageIds);
-        ScribblePages.ensureForKeys(Object.keys(ink));
-        ScribblePages.ensure(Number(data.pages) || 1);
+      if (window.AnnotatePages) {
+        if (Array.isArray(data.pageIds)) AnnotatePages.ensureIds(data.pageIds);
+        AnnotatePages.ensureForKeys(Object.keys(ink));
+        AnnotatePages.ensure(Number(data.pages) || 1);
       }
       undos = {};  // the ink these described is not the ink that is here now
       redos = {};
@@ -1156,7 +1156,7 @@
 
   function nextSlide(create) {
     var target = AnnotationModel.nextItem(Reveal.getSlides(), Reveal.getCurrentSlide());
-    if (!target && create && window.ScribblePages) target = ScribblePages.append();
+    if (!target && create && window.AnnotatePages) target = AnnotatePages.append();
     return target;
   }
 
@@ -1785,11 +1785,11 @@
     act('undo').disabled = !(undos[key] || []).length;
     act('redo').disabled = !(redos[key] || []).length;
     act('clear').disabled = !strokes().length;
-    act('delete-page').disabled = !window.ScribblePages || !ScribblePages.canRemove();
+    act('delete-page').disabled = !window.AnnotatePages || !AnnotatePages.canRemove();
     act('copy').disabled = !selected.length;
     act('paste').disabled = !clipboard || !clipboard.strokes.length;
     act('delete').disabled = !selected.length;
-    act('continue').disabled = !selected.length || (!nextSlide() && !window.ScribblePages);
+    act('continue').disabled = !selected.length || (!nextSlide() && !window.AnnotatePages);
     act('rules').classList.toggle('active', ruled);
     act('rules-closer').disabled = !ruled || ruleSpacing <= RULES.min;
     act('rules-farther').disabled = !ruled || ruleSpacing >= RULES.max;

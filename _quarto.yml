@@ -25,7 +25,7 @@ format:
     # a `title` would bring back the title slide this deck does without —
     # without one Quarto names the tab after the file, i.e. "index".
     pagetitle: Scribble
-    theme: [white, scribble.scss, _extensions/Pat-Laub/scribble/annotate.scss]
+    theme: [white, scribble.scss, _extensions/Pat-Laub/annotate/annotate.scss]
     controls: true
     # Keep both arrows in the bottom-right corner, clear of the drawing tools.
     controls-layout: bottom-right
@@ -53,8 +53,8 @@ format:
     # browser's localStorage and can be exported. The reveal.js fixes it used to
     # be bundled with now come from the slide-stage extension.
     revealjs-plugins:
-      - scribble
-    scribble:
+      - annotate
+    annotate:
       # This deck is the pad: growing a page by navigating past the last one is
       # the point here, and off everywhere else.
       pages: true

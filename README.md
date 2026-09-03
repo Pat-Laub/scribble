@@ -82,14 +82,17 @@ quarto render
 
 ## Layout
 
-The drawing tools are a Quarto extension, so a lecture deck can install them
-without copying files around:
+The drawing tools are the `Pat-Laub/annotate` extension and the fixed 16:9 stage
+is `Pat-Laub/slide-stage`, both vendored as git subtrees under `_extensions/`.
+This repo is the app: a blank pad that opts into page growth.
 
-```yaml
-format:
-  slide-stage-revealjs:
-    revealjs-plugins: [scribble]
-    theme: [..., _extensions/Pat-Laub/scribble/annotate.scss]
+```
+index.qmd                 the blank slides
+_quarto.yml               reveal.js configuration; `annotate: {pages: true}`
+scribble.scss             paper and presentation chrome
+scribble-bootstrap.html   PWA manifest and the initial-hash capture
+scripts/                  content-hashes the plugin scripts after a render
+docs/                     rendered output for GitHub Pages
 ```
 
 Page growth is opt-in, because growing the deck by navigating past the last

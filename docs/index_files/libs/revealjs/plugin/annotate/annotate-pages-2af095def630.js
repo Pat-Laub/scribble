@@ -3,17 +3,17 @@
   var api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (!root || !root.document) return;
-  root.ScribblePages = api;
+  root.AnnotatePages = api;
 
   // Growing the deck a page at a time is what a blank pad is for and exactly
   // wrong in a lecture deck, where navigating past the last slide should do
-  // nothing. It is therefore opt-in -- `scribble: {pages: true}` -- and the
+  // nothing. It is therefore opt-in -- `annotate: {pages: true}` -- and the
   // option only exists once Reveal has been configured, so wait for it the way
   // annotate.js does rather than reading at load time.
   function start() {
     if (!root.Reveal || !root.Reveal.isReady || !root.Reveal.isReady()) return false;
     var cfg = root.Reveal.getConfig ? root.Reveal.getConfig() : null;
-    var opts = cfg && cfg.scribble;
+    var opts = cfg && cfg.annotate;
     if (opts && opts.pages) api.install(root);
     return true;
   }

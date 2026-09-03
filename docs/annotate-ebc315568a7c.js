@@ -34,7 +34,7 @@
 
   // How wide each tool draws, in slide coordinates. These defaults are tuned
   // for handwriting at the deck's corrected, browser-independent scale.
-  var WIDTHS = { pen: 4.1, highlighter: 28.7 };
+  var WIDTHS = { pen: 12.3, highlighter: 86 };
 
   // The rest of what perfect-freehand needs, which is what gives a stroke its
   // shape rather than its weight: how far pressure narrows it, how much the
@@ -75,13 +75,28 @@
   var UNDO_DEPTH = 40;  // snapshots kept per slide
 
   // How far each layer reaches beyond the slide, as a multiple of the deck's
-  // size. The slide is letterboxed inside the window, and content sits flush
-  // against its edges: a stroke started a pixel to the left of a paragraph would
-  // otherwise miss the layer entirely and land on reveal's background, where the
-  // browser reads the drag as selecting text. Overscanning covers the letterbox,
-  // so the pointer meets ink wherever it goes down. Kept in step with the
-  // layers' negative `inset` in annotate.scss.
-  var OVERSCAN = 1;
+  // The layers fill the fixed stage, which is the whole authored page. Nothing
+  // is letterboxed inside it, so a pointer that goes down anywhere on screen is
+  // already over the layer and no overscan is needed; before the stage existed
+  // this was 1, covering a deck's width and height either side of the slide.
+  var OVERSCAN = 0;
+
+  // Ink is drawn and stored in the coordinates of the authored page. The stage
+  // publishes that page's size on itself, which is the same value its own fit
+  // transform uses, so there is one source of truth and nothing to keep in
+  // step by hand. Without a stage, the reveal frame is the page.
+  function pageSize() {
+    var stage = document.querySelector('[data-deck-stage]');
+    if (stage) {
+      var css = getComputedStyle(stage);
+      return [
+        parseFloat(css.getPropertyValue('--deck-width')) || stage.offsetWidth,
+        parseFloat(css.getPropertyValue('--deck-height')) || stage.offsetHeight
+      ];
+    }
+    var cfg = Reveal.getConfig();
+    return [parseFloat(cfg.width) || 960, parseFloat(cfg.height) || 700];
+  }
 
   // Scribbling over a mistake is the gesture everyone already makes on paper,
   // and it saves reaching for the eraser and back mid-sentence. The thresholds
@@ -100,7 +115,7 @@
     tolerance: 2    // simplification tolerance; ink is sampled far finer than needed
   };
   var SVG_NS = 'http://www.w3.org/2000/svg';
-  var STORE = 'reveal-ink-v2:' + location.pathname;
+  var STORE = 'reveal-ink:' + location.pathname;
   var PRINT = /(?:^|[?&])print-pdf(?:[=&]|$)/i.test(location.search);
   var PRINT_INK = PRINT && /(?:^|[?&])ink(?:[=&]|$)/i.test(location.search);
   var RULE_STORE = 'reveal-ink-rules';
@@ -803,9 +818,9 @@
   // for its page wrappers whether `pdf-ready` fires before or after this file
   // starts, then add inert SVG layers and open the browser print dialog.
   function printInk() {
-    var cfg = Reveal.getConfig();
-    W = parseFloat(cfg.width) || 960;
-    H = parseFloat(cfg.height) || 700;
+    var size = pageSize();
+    W = size[0];
+    H = size[1];
     view = [-OVERSCAN * W, -OVERSCAN * H, (1 + 2 * OVERSCAN) * W, (1 + 2 * OVERSCAN) * H];
     var finished = false;
     function layOut() {
@@ -1791,7 +1806,8 @@
     // slide to come. Nothing in reveal looks at the first child or at previous
     // siblings, and the layers' `z-index` puts them above the slide content
     // regardless of document order.
-    slides = document.querySelector('.reveal .slides');
+    slides = document.querySelector('[data-deck-stage]') ||
+      document.querySelector('.reveal .slides');
     guide = document.createElementNS(SVG_NS, 'svg');
     guide.setAttribute('class', 'ink-guide');
     guide.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
@@ -1824,7 +1840,8 @@
     // the whole deck anyway.
     surface = document.createElement('div');
     surface.className = 'ink-surface';
-    Reveal.getRevealElement().appendChild(surface);
+    (document.querySelector('[data-deck-stage]') || Reveal.getRevealElement())
+      .appendChild(surface);
 
     // Every listener hangs off the window, in the capture phase, rather than
     // off the surface: on an iPad the surface is never made the target of
@@ -1973,7 +1990,7 @@
     if (document.querySelector('.slide-menu-button')) launchers.classList.add('ink-offset');
     launchers.appendChild(full);
 
-    var parent = Reveal.getRevealElement();
+    var parent = document.querySelector('[data-deck-stage]') || Reveal.getRevealElement();
     parent.appendChild(panel);
     parent.appendChild(launchers);
 
@@ -2031,9 +2048,9 @@
   /* ------------------------------- start-up ------------------------------ */
 
   function init() {
-    var cfg = Reveal.getConfig();
-    W = parseFloat(cfg.width) || 960;
-    H = parseFloat(cfg.height) || 700;
+    var size = pageSize();
+    W = size[0];
+    H = size[1];
     view = [-OVERSCAN * W, -OVERSCAN * H, (1 + 2 * OVERSCAN) * W, (1 + 2 * OVERSCAN) * H];
     build();
     render();

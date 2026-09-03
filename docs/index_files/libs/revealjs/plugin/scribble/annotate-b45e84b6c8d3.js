@@ -139,6 +139,7 @@
   var tool = 'pen';          // this deck opens ready to write
   var lastTool = 'pen';      // restored after temporarily hiding the tools
   var hidden = false;        // the ink is parked, showing the slide underneath
+  var chrome = true;         // the bottom-left corner buttons are on show
   var ruled = readRules();    // local view preference; never part of shared ink
   var ruleSpacing = readRuleSpacing(); // browser-local guide density
   var pressureEnabled = readPressure(); // captured into each new stroke's points
@@ -1674,6 +1675,16 @@
 
   // The colour this tool draws in: the swatch's own, except that the first one
   // is a highlighter's yellow while the highlighter is out.
+  // The buttons in the bottom-left corner. A projected screen drops them (see
+  // annotate.scss), which is right nearly always -- and "nearly" is what C is
+  // for: it puts them back on that screen when it is the only one to hand, and
+  // takes them away on a presenting screen when the corner is in the way.
+  function showChrome(on) {
+    chrome = on;
+    document.documentElement.classList.toggle('ink-chrome-on', on);
+    document.documentElement.classList.toggle('ink-chrome-off', !on);
+  }
+
   function inkColour() {
     return tool === 'highlighter' && colour === COLOURS[0][1] ? HIGHLIGHT : colour;
   }
@@ -2054,6 +2065,7 @@
     view = [-OVERSCAN * W, -OVERSCAN * H, (1 + 2 * OVERSCAN) * W, (1 + 2 * OVERSCAN) * H];
     build();
     render();
+    showChrome(chrome);
 
     Reveal.on('slidechanged', function () {
       if (editing) finishText(true);
@@ -2080,6 +2092,10 @@
     Reveal.addKeyBinding(
       { keyCode: 82, key: 'R', description: 'Show/hide ruled writing guides' },
       toggleRules
+    );
+    Reveal.addKeyBinding(
+      { keyCode: 67, key: 'C', description: 'Show/hide the corner buttons' },
+      function () { showChrome(!chrome); }
     );
 
     // Capture the annotation shortcuts before reveal sees them.

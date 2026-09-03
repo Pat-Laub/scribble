@@ -586,3 +586,65 @@ $ink-launcher-icon: 120px !default;
 .slide-tool-item:has(a[onclick*="toggleScrollView"]) {
   display: none;
 }
+
+// The audience view is on a projector, so it carries no controls at all: the
+// annotation panel and its corner buttons are for the presenting device, and
+// reveal's own arrows and progress bar would only invite someone to click them.
+// The ink itself stays, since showing it is the whole point of that view.
+// `multiplex-audience` is set on <html> by the multiplex plugin.
+.multiplex-audience {
+  .deck-stage > .ink-panel,
+  .deck-stage > .ink-launchers,
+  .reveal .controls,
+  .reveal .progress,
+  .reveal .slide-menu-button {
+    display: none !important;
+  }
+
+  // The pointer has no job on this screen.
+  .deck-stage > .ink-surface { pointer-events: none !important; }
+}
+
+// C says otherwise, either way round: see showChrome() in annotate.js. On a
+// presenting screen it takes the corner row away when it is over the slide; on
+// a projected one it puts the row -- and the panel and the pointer it opens --
+// back, for when that screen is the only one to hand.
+.ink-chrome-off {
+  .deck-stage > .ink-launchers,
+  .reveal .slide-menu-button {
+    display: none !important;
+  }
+}
+
+.multiplex-audience.ink-chrome-on {
+  .deck-stage > .ink-panel.active,
+  .deck-stage > .ink-launchers,
+  .reveal .slide-menu-button {
+    display: flex !important;
+  }
+
+  .deck-stage > .ink-surface.drawing { pointer-events: auto !important; }
+}
+
+// Shown only when the presenting device is on a different deck, so the slides
+// deliberately stop following. Small and low-contrast: it is projected.
+.multiplex-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 42px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: none;
+  padding: 12px 36px;
+  border-radius: 2997px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 39px;
+  font-family: sans-serif;
+}
+
+// The scroll view is disabled in annotate.js; drop its menu entry too.
+.slide-menu-item:has(a[onclick*="toggleScrollView"]),
+.slide-tool-item:has(a[onclick*="toggleScrollView"]) {
+  display: none;
+}

@@ -55,7 +55,9 @@ format:
     revealjs-plugins:
       - annotate
     annotate:
-      # This deck is the pad: growing a page by navigating past the last one is
-      # the point here, and off everywhere else.
+      # This deck is the pad, so it differs from a lecture deck twice over: it
+      # is opened to write on rather than to present, and growing a page by
+      # navigating past the last one is the point here rather than a mistake.
+      tools: open
       pages: true
     include-in-header: scribble-bootstrap.html

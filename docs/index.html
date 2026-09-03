@@ -34,7 +34,7 @@
       vertical-align: middle;
     }
   </style>
-  <link rel="stylesheet" href="index_files/libs/revealjs/dist/theme/quarto-9620531d100e2458459c294b42a6649a.css">
+  <link rel="stylesheet" href="index_files/libs/revealjs/dist/theme/quarto-0bc4ff7c0ecb1e72f8a5b55e86bf72fb.css">
   <link href="index_files/libs/revealjs/plugin/quarto-line-highlight/line-highlight.css" rel="stylesheet">
   <link href="index_files/libs/revealjs/plugin/reveal-menu/menu.css" rel="stylesheet">
   <link href="index_files/libs/revealjs/plugin/reveal-menu/quarto-menu.css" rel="stylesheet">
@@ -313,10 +313,12 @@
   <script src="index_files/libs/revealjs/plugin/annotate/palm-rejection-a746cc691279.js"></script>
   <script src="index_files/libs/revealjs/plugin/annotate/perfect-freehand.min.js"></script>
   <script src="index_files/libs/revealjs/plugin/annotate/annotate-geometry-43788bd40d25.js"></script>
-  <script src="index_files/libs/revealjs/plugin/annotate/annotate-model-95ed2de6cc5d.js"></script>
-  <script src="index_files/libs/revealjs/plugin/annotate/annotate-pdf-3c50f9951e8a.js"></script>
-  <script src="index_files/libs/revealjs/plugin/annotate/annotate-4c76d8df0f33.js"></script>
+  <script src="index_files/libs/revealjs/plugin/annotate/annotate-model-fb38466b9605.js"></script>
+  <script src="index_files/libs/revealjs/plugin/annotate/annotate-pdf-9ad49863bff1.js"></script>
+  <script src="index_files/libs/revealjs/plugin/annotate/annotate-1ae670087f07.js"></script>
   <script src="index_files/libs/revealjs/plugin/annotate/annotate-pages-2af095def630.js"></script>
+  <script src="index_files/libs/revealjs/plugin/reveal-multiplex/socket.io.min.js"></script>
+  <script src="index_files/libs/revealjs/plugin/reveal-multiplex/multiplex.js"></script>
   <script src="index_files/libs/revealjs/plugin/quarto-support/support.js"></script>
   
 
@@ -339,7 +341,7 @@
 'autoAnimateUnmatched': true,
 'jumpToSlide': true,
 'menu': {"side":"left","useTextContentForMissingTitles":true,"markers":false,"loadIcons":false,"custom":[{"title":"Tools","icon":"<i class=\"fas fa-gear\"></i>","content":"<ul class=\"slide-menu-items\">\n<li class=\"slide-tool-item active\" data-item=\"0\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.fullscreen(event)\"><kbd>f</kbd> Fullscreen</a></li>\n<li class=\"slide-tool-item\" data-item=\"1\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.speakerMode(event)\"><kbd>s</kbd> Speaker View</a></li>\n<li class=\"slide-tool-item\" data-item=\"2\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.overview(event)\"><kbd>o</kbd> Slide Overview</a></li>\n<li class=\"slide-tool-item\" data-item=\"3\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.togglePdfExport(event)\"><kbd>e</kbd> PDF Export Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"4\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.toggleScrollView(event)\"><kbd>r</kbd> Scroll View Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"5\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.keyboardHelp(event)\"><kbd>?</kbd> Keyboard Help</a></li>\n</ul>"}],"openButton":true},
-'annotate': {"pages":true},
+'annotate': {"tools":"open","pages":true,"pdf":"generate","pdfSource":"{deck}.pdf"},
 'smaller': false,
  
         // Display controls in the bottom right corner
@@ -515,7 +517,7 @@
         },
 
         // reveal.js plugins
-        plugins: [QuartoLineHighlight, PdfExport, RevealMenu, QuartoSupport,
+        plugins: [QuartoLineHighlight, PdfExport, RevealMenu, RevealMultiplex, QuartoSupport,
 
           RevealMath,
           RevealNotes,

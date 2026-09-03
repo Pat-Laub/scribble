@@ -30,7 +30,9 @@ $stage-rail-background: transparent !default;
 
 $body-bg: #ffffff !default;
 $mainColor: #383D3D !default;
-$link-color: #d94827 !default;
+// Only the outline on the present card in overview. Defaults to the body colour
+// so the stage carries no accent of its own; a theme layer supplies one.
+$link-color: $mainColor !default;
 
 /*-- scss:rules --*/
 

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const {
   pressureSample, isIPad, cycleValue, ownsPointer, cloneStrokes,
   slideKey, nextItem, flatEnough, appendSamples
-} = require('../annotate-model.js');
+} = require('../_extensions/Pat-Laub/scribble/annotate-model.js');
 
 test('recognises classic and desktop-mode iPads without classifying Macs', () => {
   assert.equal(isIPad({ userAgent: 'Mozilla/5.0 (iPad; CPU OS 12_5)', platform: 'iPad', maxTouchPoints: 5 }), true);

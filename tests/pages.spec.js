@@ -49,3 +49,24 @@ test('a page can be deleted once more than one exists', async ({ page }) => {
   await act(page, 'delete-page').click();
   await expect.poll(() => count(page), { message: 'the page was not deleted' }).toBe(1);
 });
+
+// The contract the lecture decks depend on: the same plugin, with `pages` left
+// at its default, must not grow the deck. Without this the flag is only ever
+// exercised in the one state that suits this repo.
+test('a deck that has not opted in does not grow', async ({ page }) => {
+  await page.goto('/docs/no-pages.html');
+  await page.waitForFunction(() => window.Reveal && Reveal.isReady());
+  await page.locator('.ink-surface').waitFor();
+
+  const before = await count(page);
+  expect(before).toBe(2);
+
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(400);
+
+  expect(await count(page), 'the deck grew a page it was not asked for').toBe(2);
+  // And the drawing tools are still there: only page growth is off.
+  await expect(page.locator('.ink-panel')).toBeVisible();
+});

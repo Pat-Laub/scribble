@@ -1,0 +1,17 @@
+---
+pagetitle: Scribble without page growth
+format:
+  slide-stage-revealjs:
+    scribble:
+      pages: false
+---
+
+## A fixed deck {#fixed-one}
+
+This deck loads the same annotation plugin but leaves `pages` at its default.
+Navigating past the last slide must do nothing: growing the deck is what the
+blank pad is for and exactly wrong in a lecture deck.
+
+## The last slide {#fixed-two}
+
+There is nothing after this.

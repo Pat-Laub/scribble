@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createGuard } = require('../palm-rejection.js');
+const { createGuard } = require('../_extensions/Pat-Laub/scribble/palm-rejection.js');
 
 function event(pointerId, pointerType = 'touch') {
   return { pointerId, pointerType };

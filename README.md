@@ -82,17 +82,43 @@ quarto render
 
 ## Layout
 
+The drawing tools are a Quarto extension, so a lecture deck can install them
+without copying files around:
+
+```yaml
+format:
+  slide-stage-revealjs:
+    revealjs-plugins: [scribble]
+    theme: [..., _extensions/Pat-Laub/scribble/annotate.scss]
 ```
-index.qmd                 the blank slides
-_quarto.yml               reveal.js configuration
+
+Page growth is opt-in, because growing the deck by navigating past the last
+slide is what a blank pad is for and exactly wrong in a lecture deck:
+
+```yaml
+    scribble:
+      pages: true
+```
+
+```
+_extensions/Pat-Laub/scribble/
+    _extension.yml            the revealjs plugin and its defaults
+    annotate.js               pen, highlighter, eraser, text, lasso, persistence
+    annotate-geometry.js      portable, DOM-free annotation geometry
+    annotate-model.js         portable pressure and stroke model helpers
+    annotate-pdf.js           dependency-free vector PDF encoder
+    palm-rejection.js         keeps multi-contact palm touches out of reveal swipes
+    scribble-pages.js         grows and deletes blank pages (opt-in)
+    perfect-freehand.min.js   vendored MIT stroke-shaping library
+    annotate.scss             annotation UI styling; a theme layer, since it
+                              needs the deck's own colours
+_extensions/Pat-Laub/slide-stage/   the fixed 16:9 stage, a git subtree
+index.qmd                 the blank pad
+no-pages.qmd              the same tools with page growth off, so the default
+                          every other deck relies on is actually tested
 scribble.scss             paper and presentation chrome
-annotate.scss             annotation UI styling
-annotate.js               pen, highlighter, eraser and persistence
-annotate-geometry.js      portable, DOM-free annotation geometry
-annotate-model.js         portable pressure and stroke model helpers
-annotate-pdf.js           dependency-free vector PDF encoder
-palm-rejection.js         keeps multi-contact palm touches out of reveal swipes
-perfect-freehand.min.js   vendored MIT stroke-shaping library
-reveal-fixes.html         reveal.js fixes and annotation script includes
 docs/                     rendered output for GitHub Pages
 ```
+
+The reveal.js fixes this deck used to carry are now the stage's, which is a
+superset of them.

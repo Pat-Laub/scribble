@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { create, quadraticPathToPdf, pdfString } = require('../annotate-pdf.js');
+const { create, quadraticPathToPdf, pdfString } = require('../_extensions/Pat-Laub/scribble/annotate-pdf.js');
 
 test('quadratic freehand paths become exact cubic PDF paths', () => {
   assert.equal(

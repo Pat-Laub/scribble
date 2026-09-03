@@ -2056,7 +2056,7 @@
       function () { hide(!hidden); }
     );
     Reveal.addKeyBinding(
-      { keyCode: 76, key: 'L', description: 'Show/hide ruled writing guides' },
+      { keyCode: 82, key: 'R', description: 'Show/hide ruled writing guides' },
       toggleRules
     );
 

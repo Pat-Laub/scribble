@@ -13,7 +13,12 @@ project:
     - node scripts/fingerprint-annotation-assets.js
 
 format:
-  revealjs:
+  # The fixed 16:9 stage and the reveal.js fixes come from the
+  # Pat-Laub/slide-stage format extension, vendored as a git subtree in
+  # _extensions/. Refresh it with:
+  #   git subtree pull --prefix=_extensions/Pat-Laub/slide-stage \
+  #       <repo> dist-vX.Y.Z --squash
+  slide-stage-revealjs:
     # A blank writing surface: no title slide, no headings, no theme chrome
     # beyond the slide counter. Everything on screen is drawn by hand.
     # The browser tab / bookmark name. `pagetitle` rather than `title` because
@@ -39,18 +44,13 @@ format:
     # The deck is the whole page — no scrollbars, no reveal "scroll view".
     embed-resources: false
     preview-links: false
-    margin: 0
-    # 16:9 matches modern lecture-room displays and avoids an invisible white
-    # letterbox at the left and right that looked drawable but was outside the
-    # overview/PDF page. The 700-unit height also gives handwriting practical,
-    # easy-to-tune slide-coordinate widths.
-    width: 1244
-    height: 700
-    # Keep the address bar in step with the current slide (see also
-    # reveal-fixes.html) without adding a Back-button entry per slide, so
-    # reloading on the iPad returns to the slide you were writing on.
-    history: false
+    # The pad is edge to edge -- no inset content frame and no rail -- so
+    # reveal's frame is the whole authored page. scribble.scss zeroes the
+    # stage's content insets to match; the two have to agree.
+    width: 3744
+    height: 2106
     # `reveal-fixes.html` loads the MIT-licensed freehand annotation tool.
     # Ink is saved per slide in the browser's localStorage and can be exported.
+    # It is appended after the extension's own includes.
     include-in-header: scribble-bootstrap.html
     include-after-body: reveal-fixes.html

@@ -1,6 +1,9 @@
 # scribble
 
 A 16:9 blank reveal.js deck that grows a page at a time, with no title page and no typeset content.
+It is drawn on the fixed 3744 x 2106 stage from the `Pat-Laub/slide-stage` format
+extension, vendored as a git subtree in `_extensions/`, so the pad and the
+lecture decks share one coordinate system.
 Drawing uses the MIT-licensed [perfect-freehand](https://github.com/steveruizok/perfect-freehand) package through the self-contained `annotate.js` tool.
 
 ## Using it
@@ -64,10 +67,8 @@ boxes, lasso selection, copy and paste, growing and deleting pages, and the
 ruled guides — so that merging the annotation code with a lecture deck's copy
 cannot quietly drop them.
 
-One thing to know when writing more of them: the ink layers are overscanned to
-three times the page and hang outside the viewport, so a fraction of
-`svg.ink-pen` is a negative screen coordinate. Drive input through
-`.ink-surface` instead, which is the element that actually takes it —
+One thing to know when writing more of them: drive input through `.ink-surface`
+rather than the ink layers, which is the element that actually takes it —
 `tests/support/pad.js` does this.
 
 ## Rendering

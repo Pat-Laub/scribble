@@ -3,6 +3,15 @@
 // The reveal `white` theme with its typography left alone — nothing is typeset
 // on these slides, so the only things that matter are the paper colour and the
 // small amount of chrome drawn on top of it.
+// The pad has no inset content frame and no rail: the authored page is the
+// writing surface, edge to edge. These must agree with `width`/`height` in
+// _quarto.yml, which are the reveal frame the insets leave behind.
+$content-left: 0px;
+$content-top: 0px;
+$content-right: 0px;
+$content-bottom: 0px;
+$rail-width: 0px;
+
 $backgroundColor: #ffffff;
 $mainColor: #1d1d1d;
 // Used by the slide counter and reveal's arrows; the drawing rail reads
@@ -12,8 +21,10 @@ $linkColorHover: #7089ef;
 
 // Defaults used by the accompanying freehand annotation controls.
 $ink-accent: #4465e9;
-$ink-panel-width: 44px;
-$ink-button-size: 34px;
+// The corner launchers read this; keep them on the pad's own accent.
+$link-color: #4465e9;
+$ink-panel-width: 132px;
+$ink-button-size: 102px;
 
 /*-- scss:rules --*/
 

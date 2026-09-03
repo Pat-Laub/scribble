@@ -25,18 +25,16 @@ $ink-button-size: 34px !default;
 //     overlapping highlighter strokes from compounding into dark blotches.
 //
 // Neither layer takes any input; `.ink-surface` below does that for both.
-.reveal .ink-layer {
+.deck-stage > .ink-layer {
   position: absolute;
-  // A deck's width and height either side of the slide, so the layer also
-  // covers the letterbox the slide is scaled into: see OVERSCAN in annotate.js,
-  // which this has to agree with, and which explains why.
-  // WebKit applies a negative SVG inset visually but can still report the
-  // element's original 100% dimensions. Explicit dimensions keep its layout,
-  // rendering and bounding box in agreement across browsers.
-  left: -100%;
-  top: -100%;
-  width: 300%;
-  height: 300%;
+  // The layer fills the stage. There is no letterbox to cover any more: the
+  // stage is the whole authored page and it is what gets scaled to the window,
+  // so a stroke started anywhere on screen is already over the layer. This is
+  // what OVERSCAN in annotate.js used to compensate for.
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
   overflow: visible;
   pointer-events: none;
   z-index: 13;
@@ -73,7 +71,7 @@ $ink-button-size: 34px !default;
 // A local writing aid, deliberately separate from the annotation model. In a
 // multiplexed deck the presenter can create this view without sending anything
 // to audience clients.
-.reveal .ink-guide {
+.deck-stage .ink-guide {
   position: absolute;
   inset: 0;
   overflow: visible;
@@ -92,7 +90,7 @@ $ink-button-size: 34px !default;
   }
 }
 
-.reveal .ink-selection-layer {
+.deck-stage .ink-selection-layer {
   position: absolute;
   left: -100%;
   top: -100%;
@@ -127,7 +125,7 @@ $ink-button-size: 34px !default;
   }
 }
 
-.reveal .ink-layer .ink-selected {
+.deck-stage > .ink-layer .ink-selected {
   filter: drop-shadow(0 0 3px rgba(38, 104, 199, 0.9));
 }
 
@@ -173,7 +171,7 @@ $ink-button-size: 34px !default;
 // The z-index is the scribble deck's: above `.slides`, which reveal puts at 1,
 // and below the arrows and the tool panel, so both stay usable with a tool in
 // hand.
-.reveal .ink-surface {
+.deck-stage > .ink-surface {
   position: absolute;
   inset: 0;
   z-index: 10;
@@ -227,12 +225,15 @@ $ink-button-size: 34px !default;
   font-weight: 400;
 }
 
-.reveal .ink-panel {
-  position: fixed;
+.deck-stage > .ink-panel {
+  // Absolute inside the stage, not fixed: the stage's transform would be the
+  // containing block for `fixed` regardless, so say what is meant. Offsets are
+  // authored page units and scale with everything else.
+  position: absolute;
   top: 50%;
   // This blank-paper deck has no side bar, so keep the panel just inside the
   // right edge.
-  right: 8px;
+  right: 24px;
   transform: translateY(-50%);
   z-index: 45;
   display: none;
@@ -257,9 +258,9 @@ $ink-button-size: 34px !default;
   }
 }
 
-.reveal .ink-btn,
-.reveal .ink-swatch,
-.reveal .ink-option {
+.deck-stage .ink-btn,
+.deck-stage .ink-swatch,
+.deck-stage .ink-option {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -283,8 +284,8 @@ $ink-button-size: 34px !default;
   }
 }
 
-.reveal .ink-btn.active,
-.reveal .ink-option.active {
+.deck-stage .ink-btn.active,
+.deck-stage .ink-option.active {
   background: $ink-accent;
   color: #fff;
 }
@@ -292,7 +293,7 @@ $ink-button-size: 34px !default;
 // Less-frequent and session-level controls live beside the writing rail. The
 // rail stays short and glanceable, while labels make this panel self-explanatory
 // when it is opened at the start of a lecture or for an occasional edit.
-.reveal .ink-more {
+.deck-stage .ink-more {
   position: absolute;
   top: 50%;
   right: calc(100% + 8px);
@@ -324,7 +325,7 @@ $ink-button-size: 34px !default;
 // Selection actions are close to the lasso tool without making the main rail
 // permanently taller. Paste stays here after a slide change; Copy and Delete
 // enable as soon as a lasso encloses ink.
-.reveal .ink-selection-actions {
+.deck-stage .ink-selection-actions {
   position: absolute;
   top: 50%;
   right: calc(100% + 8px);
@@ -341,7 +342,7 @@ $ink-button-size: 34px !default;
   }
 }
 
-.reveal .ink-more-title {
+.deck-stage .ink-more-title {
   padding: 0 5px 4px;
   color: rgba(0, 0, 0, 0.58);
   font-size: 12px;
@@ -350,7 +351,7 @@ $ink-button-size: 34px !default;
   text-align: left;
 }
 
-.reveal .ink-width-row {
+.deck-stage .ink-width-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -360,11 +361,11 @@ $ink-button-size: 34px !default;
   }
 }
 
-.reveal .ink-rule-title {
+.deck-stage .ink-rule-title {
   padding-top: 5px;
 }
 
-.reveal .ink-rule-row {
+.deck-stage .ink-rule-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -376,7 +377,7 @@ $ink-button-size: 34px !default;
   }
 }
 
-.reveal .ink-option {
+.deck-stage .ink-option {
   justify-content: flex-start;
   width: 100%;
   height: 38px;
@@ -390,8 +391,8 @@ $ink-button-size: 34px !default;
   }
 }
 
-.reveal .ink-btn[disabled],
-.reveal .ink-option[disabled] {
+.deck-stage .ink-btn[disabled],
+.deck-stage .ink-option[disabled] {
   opacity: 0.25;
   background: transparent;
   cursor: default;
@@ -399,42 +400,38 @@ $ink-button-size: 34px !default;
 
 // Each swatch shows its colour as a dot; the button's `color` is set inline by
 // annotate.js, so the dot and its selection ring both just use currentColor.
-.reveal .ink-swatch::before {
+.deck-stage .ink-swatch::before {
   content: "";
   width: 17px;
   height: 17px;
   border-radius: 50%;
   background: currentColor;
 }
-.reveal .ink-swatch.active::before {
+.deck-stage .ink-swatch.active::before {
   box-shadow: 0 0 0 3px #fff, 0 0 0 5px currentColor;
 }
 
 // The full-screen button continues reveal's bottom-left menu control. Both use
 // the same bottom offset, so their icon boxes share a baseline.
-.reveal .ink-launchers {
-  --ink-button: 2.2rem;
+.deck-stage > .ink-launchers {
+  // In authored page units, like the panel. A rem here would follow the deck's
+  // 84px root size rather than the button's own scale.
+  --ink-button: 168px;
 
-  // The width below which quarto's footer.css shrinks the hamburger; follow it
-  // so our two buttons don't tower over it.
-  @media screen and (max-width: 800px) {
-    --ink-button: 1.3rem;
-  }
-
-  position: fixed;
-  left: 8px;
-  bottom: 8px;
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
   z-index: 30;
   display: flex;
   &.ink-offset {
     // Continue immediately after reveal's 2.2rem menu button. The two icons
     // have their own internal whitespace, so a CSS gap here looks much wider
     // than the gap between the hamburger's bars.
-    left: calc(8px + var(--ink-button));
+    left: calc(24px + var(--ink-button));
   }
 }
 
-.reveal .ink-toggle {
+.deck-stage .ink-toggle {
   display: grid;
   place-items: center;
   width: var(--ink-button);

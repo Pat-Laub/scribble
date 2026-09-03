@@ -1,13 +1,21 @@
 /*-- scss:defaults --*/
 
-// Styling for annotate.js: the ink layer, the tool panel that sits in the
-// yellow bar, and the corner buttons that share reveal's bottom-left row.
-// Loaded after custom.scss, whose $mainColor, $link-color and $bar-width it
-// uses.
+// Styling for annotate.js: the ink layers, the tool panel, and the corner
+// buttons that share reveal's bottom-left row with Quarto's menu. Loaded as a
+// theme layer rather than a plugin stylesheet because it needs the deck's own
+// $mainColor and $link-color.
+//
+// Every size below is in authored page units -- the stage is scaled to the
+// window as one rectangle, so a length meant for a browser-sized page comes out
+// at a fraction of everything beside it.
 
 $ink-accent: #2668c7 !default;
-$ink-panel-width: 44px !default;
-$ink-button-size: 34px !default;
+$ink-panel-width: 132px !default;
+$ink-button-size: 102px !default;
+// The corner row is tapped with a finger; 168 authored px is the 44pt Apple
+// asks for once the canvas is scaled down to an iPad.
+$ink-launcher-size: 168px !default;
+$ink-launcher-icon: 120px !default;
 
 /*-- scss:rules --*/
 

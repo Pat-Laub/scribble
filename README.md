@@ -48,6 +48,28 @@ drops into it by itself on a viewport under 435px. That view abandons the fixed
 (`Reveal.removeKeyBinding(82)`), sets `scrollActivationWidth: null`, and
 `annotate.scss` hides the matching menu entry. <kbd>R</kbd> is ours.
 
+## Testing
+
+```sh
+npm install
+npx playwright install chromium firefox webkit
+npm run render        # docs/ is what the tests load
+npm test              # unit tests, then the browser tests
+```
+
+`test/` holds the DOM-free unit tests (`node --test`); `tests/` holds the
+Playwright tests, which drive a real browser across chromium, firefox and
+webkit. They cover the tools this deck has and the lecture decks do not — text
+boxes, lasso selection, copy and paste, growing and deleting pages, and the
+ruled guides — so that merging the annotation code with a lecture deck's copy
+cannot quietly drop them.
+
+One thing to know when writing more of them: the ink layers are overscanned to
+three times the page and hang outside the viewport, so a fraction of
+`svg.ink-pen` is a negative screen coordinate. Drive input through
+`.ink-surface` instead, which is the element that actually takes it —
+`tests/support/pad.js` does this.
+
 ## Rendering
 
 ```sh

@@ -1,0 +1,15 @@
+{
+  "name": "scribble-tests",
+  "private": true,
+  "scripts": {
+    "render": "quarto render",
+    "test": "npm run test:unit && npm run test:browser",
+    "test:unit": "node --test test/*.test.js",
+    "test:browser": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}

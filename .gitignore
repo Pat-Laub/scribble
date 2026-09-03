@@ -20,3 +20,8 @@
 *conflicted copy*
 
 **/*.quarto_ipynb
+
+# Playwright
+node_modules/
+test-results/
+playwright-report/

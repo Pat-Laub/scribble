@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   pressureSample, isIPad, cycleValue, ownsPointer, cloneStrokes,
-  slideKey, nextItem
+  slideKey, nextItem, flatEnough, appendSamples
 } = require('../annotate-model.js');
 
 test('recognises classic and desktop-mode iPads without classifying Macs', () => {
@@ -82,4 +82,57 @@ test('next-slide lookup follows reveal order and stops at the final slide', () =
   assert.equal(nextItem(slides, slides[1]), slides[2]);
   assert.equal(nextItem(slides, slides[2]), null);
   assert.equal(nextItem(slides, { id: 'unknown' }), null);
+});
+
+test('a coalesced batch that repeats the previous one adds nothing', () => {
+  // Safari on iPadOS re-reports the whole of the batch before it.
+  const p = [[0, 0, 0.5], [4, 0, 0.5], [8, 0, 0.5]];
+  const again = appendSamples(p, [[0, 0, 0.5], [4, 0, 0.5], [8, 0, 0.5]]);
+  assert.equal(again.added, 0);
+  assert.deepEqual(p, [[0, 0, 0.5], [4, 0, 0.5], [8, 0, 0.5]]);
+});
+
+test('samples closer together than a step say nothing new', () => {
+  const p = [[0, 0, 0.5]];
+  assert.equal(appendSamples(p, [[0.1, 0.1, 0.5], [0.2, 0, 0.5]]).added, 0);
+  assert.equal(appendSamples(p, [[1, 0, 0.5]]).added, 1);
+});
+
+test('a straight run is thinned to its ends while a curve keeps its points', () => {
+  const straight = [[0, 0, 0.5]];
+  for (let x = 1; x <= 10; x++) appendSamples(straight, [[x, 0, 0.5]]);
+  // A flat run collapses to its start, one anchor and the tip: the point
+  // behind the tip keeps being taken back as each new sample stands for it.
+  assert.equal(straight.length, 3);
+  assert.deepEqual(straight[straight.length - 1], [10, 0, 0.5]);
+
+  const curved = [[0, 0, 0.5]];
+  for (let i = 1; i <= 10; i++) {
+    const a = (i / 10) * Math.PI;
+    appendSamples(curved, [[10 * Math.cos(a), 10 * Math.sin(a), 0.5]]);
+  }
+  assert.ok(curved.length > 8);
+});
+
+test('thinning never touches the newest sample, so the ink stays under the nib', () => {
+  const p = [[0, 0, 0.5], [1, 0, 0.5], [2, 0, 0.5]];
+  const tip = [3, 0, 0.5];
+  appendSamples(p, [tip]);
+  assert.deepEqual(p[p.length - 1], tip);
+});
+
+test('a change of pressure holds a point that is otherwise flat', () => {
+  assert.equal(flatEnough([0, 0, 0.5], [1, 0, 0.5], [2, 0, 0.5]), true);
+  assert.equal(flatEnough([0, 0, 0.3], [1, 0, 0.5], [2, 0, 0.5]), false);
+  // A neighbour pair further apart than the span is not allowed to stand in.
+  assert.equal(flatEnough([0, 0, 0.5], [10, 0, 0.5], [20, 0, 0.5]), false);
+  // Nor is one the middle point sits visibly off.
+  assert.equal(flatEnough([0, 0, 0.5], [1, 2, 0.5], [2, 0, 0.5]), false);
+});
+
+test('a dropped point is reported, so a live path knows to redraw', () => {
+  const p = [[0, 0, 0.5], [1, 0, 0.5], [2, 0, 0.5]];
+  const added = appendSamples(p, [[3, 0, 0.5]]);
+  assert.equal(added.added, 1);
+  assert.equal(added.dropped, 1);
 });

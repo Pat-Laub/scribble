@@ -130,7 +130,7 @@
   var colour = COLOURS[0][1];
   var moreOpen = false;       // session controls expand beside the writing rail
   var lastWheel = 0;          // one colour step per physical wheel gesture
-  var live = null;           // { stroke, el } while a stroke is being drawn
+  var live = null;           // { stroke, trail } while a stroke is being drawn
   var erasing = false;       // an eraser drag is in progress
   var held = null;           // the tool the right button borrowed the eraser from
   var armed = false;         // the live stroke has been recognised as a scribble
@@ -161,13 +161,19 @@
 
   /* ------------------------------ stroke maths --------------------------- */
 
+  // The nib a stroke was drawn with. Ink saved before strokes carried their own
+  // width falls back to the nib in hand, so an old file still draws.
+  function nib(stroke) {
+    return stroke.w > 0 ? stroke.w : widths[stroke.t];
+  }
+
   // perfect-freehand returns the stroke's outline as a polygon; draw it as a
   // path of quadratic curves through the midpoints, which rounds the corners.
   function pathData(stroke, unfinished) {
     var o = TOOLS[stroke.t];
     if (stroke.s && o.simulated) o = o.simulated;
     var pts = getStroke(stroke.p, {
-      size: stroke.w * (o.share || 1),
+      size: nib(stroke) * (o.share || 1),
       thinning: o.thinning, smoothing: o.smoothing,
       streamline: o.streamline, easing: o.easing,
       simulatePressure: stroke.s, last: !unfinished
@@ -187,6 +193,62 @@
     el.setAttribute('d', pathData(stroke, unfinished));
     return el;
   }
+
+  // A stroke in progress is redrawn every frame, and pathData() builds its
+  // outline from all of its points: the longer the line, the more it costs to
+  // add anything to it, and by the time one crosses the page the frame is spent
+  // rebuilding what has not changed. The garbage that leaves behind — an
+  // outline and a path string of tens of kilobytes, sixty times a second — is
+  // what makes a long line arrive in pulses: smooth for a second or two, a
+  // pause while the collector runs, and again.
+  //
+  // So the settled part of a stroke is frozen into a path of its own and left
+  // alone, and only the tail is rebuilt. Each frozen piece runs OVERLAP points
+  // past where the tail picks up, hiding both the blunt end perfect-freehand
+  // leaves on an unfinished stroke and the thin start it gives the next one;
+  // same colour, same layer, and a layer carries its opacity as a whole, so
+  // overlapping pieces do not compound and nothing shows where they meet. When
+  // the stroke ends the pieces go and it is drawn once, whole: everything
+  // downstream — erasing, undo, saving, the PDF — still sees one stroke.
+  var CHUNK = 128;   // points the tail grows to before it is frozen
+  var OVERLAP = 16;  // points a frozen piece and the tail have in common
+
+  function part(stroke, from, to) {
+    return { t: stroke.t, c: stroke.c, w: stroke.w, s: stroke.s, p: stroke.p.slice(from, to) };
+  }
+
+  function Trail(stroke, layer) {
+    this.stroke = stroke;
+    this.layer = layer;
+    this.base = 0;        // where the tail starts, in the stroke's points
+    this.pieces = [];
+    this.el = pathFor(stroke, true);
+    layer.appendChild(this.el);
+  }
+
+  Trail.prototype.draw = function () {
+    if (this.stroke.p.length - this.base > CHUNK + OVERLAP) {
+      var cut = this.base + CHUNK;
+      var piece = pathFor(part(this.stroke, this.base, cut + OVERLAP), true);
+      this.layer.insertBefore(piece, this.el);
+      this.pieces.push(piece);
+      this.base = cut;
+    }
+    this.el.setAttribute('d', pathData(part(this.stroke, this.base), true));
+  };
+
+  // The stroke is finished: one path for the whole of it, tapered end and all,
+  // and the pieces that carried it while it was being drawn are taken away.
+  Trail.prototype.close = function () {
+    this.pieces.forEach(function (el) { el.remove(); });
+    this.pieces = [];
+    this.el.setAttribute('d', pathData(this.stroke));
+  };
+
+  Trail.prototype.fade = function () {
+    this.el.classList.add('ink-fading');
+    this.pieces.forEach(function (el) { el.classList.add('ink-fading'); });
+  };
 
   function isText(annotation) { return annotation && annotation.t === 'text'; }
 
@@ -287,7 +349,7 @@
 
   function touches(stroke, x, y) {
     if (isText(stroke)) return AnnotationGeometry.insideBounds([x, y], itemBox(stroke), ERASER);
-    var r = ERASER + stroke.w / 2, p = stroke.p;
+    var r = ERASER + nib(stroke) / 2, p = stroke.p;
     for (var i = 0; i < p.length; i++) {
       if (segDist(x, y, p[i], p[i + 1] || p[i]) <= r) return true;
     }
@@ -1115,37 +1177,6 @@
     save();
   }
 
-  // Safari on iPadOS hands back samples it has already handed back: each
-  // pointermove's coalesced batch opens with the whole of the batch the move
-  // before it carried. Appending those walks the stroke back over itself and
-  // forward again, and perfect-freehand reads every fold as a change of
-  // direction and caps it the way it caps the end of a stroke — which is why an
-  // Apple Pencil draws a chain of separate segments where a mouse or a Wacom,
-  // whose moves carry no repeats, draws one line. Half the points in a Pencil
-  // stroke arrive this way.
-  //
-  // A pen standing still is the only thing that puts two samples on the same
-  // tenth of a unit, and dropping one of those costs nothing, so a point the
-  // recent tail already holds is a repeat.
-  var REPEAT = 32;  // how far back to look; a coalesced batch is far shorter
-
-  function fresh(batch, p) {
-    var tail = p.slice(-REPEAT), out = [];
-    for (var i = 0; i < batch.length; i++) {
-      if (seen(tail, batch[i])) continue;
-      out.push(batch[i]);
-      if (tail.push(batch[i]) > REPEAT) tail.shift();
-    }
-    return out;
-  }
-
-  function seen(tail, q) {
-    for (var i = 0; i < tail.length; i++) {
-      if (tail[i][0] === q[0] && tail[i][1] === q[1]) return true;
-    }
-    return false;
-  }
-
   // The modifier reveal's zoom plugin magnifies on (ctrl on Linux, otherwise
   // alt), honouring an explicit `zoomKey`; the same one the arrow-key panning
   // in reveal-fixes.html looks for.
@@ -1274,9 +1305,9 @@
     snapshot();
     var stroke = { t: tool, c: inkColour(), w: widths[tool], s: !stylus, p: [p] };
     (ink[slideKey()] = ink[slideKey()] || []).push(stroke);
-    live = { stroke: stroke, el: pathFor(stroke, true) };
-    nodes.set(stroke, live.el);
-    layers[tool].appendChild(live.el);
+    var trail = new Trail(stroke, layers[tool]);
+    live = { stroke: stroke, trail: trail };
+    nodes.set(stroke, trail.el);
     armed = false;
     marked = [];
     sync();
@@ -1313,9 +1344,7 @@
     e.stopPropagation();
     if (erasing) { points(e).forEach(function (p) { erase(p[0], p[1]); }); return; }
     if (lasso) {
-      var loopPoints = fresh(points(e), lasso.p);
-      if (!loopPoints.length) return;
-      lasso.p = lasso.p.concat(loopPoints);
+      if (!AnnotationModel.appendSamples(lasso.p, points(e)).added) return;
       lasso.el.setAttribute('d', lassoData(lasso.p));
       return;
     }
@@ -1359,10 +1388,9 @@
       showSelection();
       return;
     }
-    var added = fresh(points(e), live.stroke.p);
-    if (!added.length) return;
-    live.stroke.p = live.stroke.p.concat(added);
-    live.el.setAttribute('d', pathData(live.stroke, true));
+    var added = AnnotationModel.appendSamples(live.stroke.p, points(e));
+    if (!added.added && !added.dropped) return;
+    live.trail.draw();
     scribble();
   }
 
@@ -1461,7 +1489,7 @@
       if (marked.length) {
         rub();
       } else {
-        live.el.setAttribute('d', pathData(live.stroke));  // close off the tapered end
+        live.trail.close();  // one path for the whole stroke, tapered end and all
         live = null;
         save();
       }
@@ -1497,7 +1525,7 @@
     });
     if (!marked.length || armed) return;
     armed = true;
-    live.el.classList.add('ink-fading');
+    live.trail.fade();
     sync();
   }
 

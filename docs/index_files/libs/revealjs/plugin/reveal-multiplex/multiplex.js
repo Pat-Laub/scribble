@@ -11,8 +11,12 @@
 window.RevealMultiplex = {
 	id: 'multiplex',
 
-	// The relay on pikachu, behind a Cloudflare tunnel.
-	server: 'https://multiplex.laub.au',
+	// Consumers may supply their relay as Reveal's `multiplexRelay.server`
+	// setting. Not `multiplex`: Quarto reserves that key, and switches its own
+	// bundled multiplex plugin on for any deck that sets it, which then opens a
+	// socket to a public relay of its own.
+	// The public extension is otherwise inert rather than assuming a server.
+	server: null,
 
 	init: function ( deck ) {
 		// The speaker view holds two more copies of this deck in iframes of the
@@ -96,17 +100,28 @@ window.RevealMultiplex = {
 
 		/* ----------------------------- the relay ------------------------------ */
 
-		var role, token;
-		try {
-			role = localStorage.getItem( 'multiplex-role' );
-			token = localStorage.getItem( 'multiplex-token' );
-		} catch ( e ) { return; }             // storage blocked: behave as an ordinary deck
+		// The course site hands a staff session its credentials in the page
+		// itself, on `?present` or `?project`: no login page, no 180-day token
+		// sitting in a browser, and nothing to have set up on the right device
+		// beforehand. The localStorage pair is the older path and still works,
+		// which is what keeps the published decks and the login page usable
+		// until the new site is the only way in.
+		var handed = window.__multiplex || {};
+		var role = handed.role, token = handed.token;
+		if ( !role || !token ) {
+			try {
+				role = localStorage.getItem( 'multiplex-role' );
+				token = localStorage.getItem( 'multiplex-token' );
+			} catch ( e ) { return; }         // storage blocked: behave as an ordinary deck
+		}
 		if ( ( role !== 'presenter' && role !== 'audience' ) || !token ) return;
 
 		var debug = false;
 		try { debug = !!localStorage.getItem( 'multiplex-debug' ); } catch ( e ) {}
 
-		var server = window.RevealMultiplex.server;
+		var config = deck.getConfig().multiplexRelay || {};
+		var server = handed.server || config.server || window.RevealMultiplex.server;
+		if ( !server ) return;
 		var socket = io.connect( server, {
 			query: { token: token, role: role },
 			transports: [ 'websocket', 'polling' ]

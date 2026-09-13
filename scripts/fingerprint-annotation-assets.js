@@ -13,6 +13,7 @@ const ASSETS = [
   'palm-rejection.js',
   'annotate-geometry.js',
   'annotate-model.js',
+  'annotate-codec.js',
   'annotate-pdf.js',
   'annotate.js'
 ];

@@ -1,6 +1,6 @@
 title: Slide stage
 author: Patrick Laub
-version: 0.4.0
+version: 0.6.0
 quarto-required: ">=1.4.0"
 contributes:
   formats:
@@ -20,6 +20,11 @@ contributes:
       min-scale: 1
       max-scale: 1
       embedded: true
+      # Quarto's reveal-menu is a fixed-position control sized for a browser
+      # page, so on the authored canvas it lands in the wrong corner at a
+      # fraction of the size of the buttons beside it. Compensating for it in
+      # SCSS is what makes it the stage's business to turn off.
+      menu: false
       # reveal-fixes.html replaces reveal's own throttled hash handling.
       history: false
       theme:

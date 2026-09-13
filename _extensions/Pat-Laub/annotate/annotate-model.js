@@ -56,32 +56,64 @@
 
   // A stylus samples on a clock, not on the shape of the writing, so a run
   // going straight collects as many samples as the tightest loop of an 'e'.
-  // Three filters run on the way in, so the points that are drawn are exactly
-  // the points that are kept, saved and exported.
+  // Filters run on the way in, so the points that are drawn are exactly the
+  // points that are kept, saved and exported.
   //
   //   * `repeat` — how far back to look for a point the stroke already holds.
   //     Safari on iPadOS opens each coalesced batch with the whole of the batch
   //     before it; appending those walks the stroke back over itself, and
   //     perfect-freehand reads every fold as a change of direction and caps it,
   //     which is why an Apple Pencil drew a chain of segments where a mouse
-  //     drew one line.
+  //     drew one line. This one is correctness, not economy, and stays on.
   //   * `step` — a sample closer than this to the last one, at much the same
   //     pressure, says nothing the last one did not.
   //   * `flat` / `span` — once a third sample lands, the one behind it is asked
   //     whether its two neighbours already stand for it: within `flat` of the
   //     line between them, over no more than `span`, and carrying no change of
-  //     pressure. If they do it goes. What is kept then follows the curvature
-  //     of the writing rather than the clock.
+  //     pressure. If they do it goes.
   //
-  // Only the point behind the tip is ever dropped, so the ink stays under the
-  // nib and nothing is re-shaped when the pen is lifted.
-  // `step`, `flat` and `span` are distances in the page's own units, so they
-  // track the authored page: these are for the 3744-unit page the stage draws.
-  // They were originally tuned against a 1248-unit one, and are three times
-  // those -- a threshold left at the smaller page's value thins three times
-  // too finely and keeps three times the points. `pressure` is a pressure
-  // difference and `repeat` a count, so neither scales.
-  var SAMPLING = { repeat: 32, step: 1.5, flat: 0.45, span: 36, pressure: 0.03 };
+  // `step` and `flat` are both off: every sample the pen gives is kept.
+  //
+  // `flat` is off because it was broken, not merely expensive. It takes back a
+  // point the stroke already holds, and it can do that on sample after sample,
+  // so through the gentle curves that most of handwriting is made of the kept
+  // points stop following the pen and the stroke crosses the curve in straight
+  // chords of up to `span` -- about 13 screen pixels on an iPad, a ruled line
+  // through the middle of a letter, at the widths mathematics is written at.
+  // Lowering `flat` changes how often that happens, never how long the chords
+  // are, since `span` alone bounds those. `pressure` hid it for years: each
+  // rule declines to drop a point whose pressure is doing something, so with
+  // stylus pressure ON the runs were constantly interrupted and the damage was
+  // mild. With pressure off every point carries a flat 0.5, the guard can never
+  // fire, and the rule ran unopposed -- it discarded 47% of a real page of
+  // handwriting on its own. `test/annotate-model.test.js` keeps a todo test
+  // that still describes it.
+  //
+  // `step` is off because what it bought is no longer needed. It is not
+  // destructive the way `flat` is -- it only skips an incoming sample, never
+  // takes back a kept one -- but it is an economy, and the economy has been
+  // paid for twice over: the packed v7 encoding (annotate-codec.js) spends
+  // about 8 bytes on a point where the old JSON spent 20, and saved ink only
+  // has to outlive one lecture. A deck is written on, exported, and done with;
+  // localStorage is the buffer between those two moments, not an archive. A
+  // heavily annotated lecture is about 1.8 MB packed with nothing dropped,
+  // which sits inside the few megabytes an origin gets with room to spare, and
+  // keeping every sample is worth more than the headroom for a second lecture
+  // that is never wanted at the same time.
+  //
+  // Neither rule was ever needed for drawing: Trail in annotate.js rebuilds
+  // only the tail, capped at CHUNK + OVERLAP points, so the cost of a frame
+  // does not grow with the stroke.
+  //
+  // The mechanism is kept, and `appendSamples` still honours whatever
+  // thresholds it is handed: the unit tests drive them directly, and a caller
+  // storing ink somewhere tighter may want them. `step`, `flat` and `span` are
+  // distances in the page's own units, so were they turned back on they would
+  // have to track the authored page -- the values below are for the 3744-unit
+  // page the stage draws, three times the 1248-unit page they were first tuned
+  // against. `pressure` is a pressure difference and `repeat` a count, so
+  // neither scales.
+  var SAMPLING = { repeat: 32, step: 0, flat: 0, span: 36, pressure: 0.03 };
 
   function seenRecently(points, q, repeat) {
     for (var i = Math.max(0, points.length - repeat); i < points.length; i++) {
@@ -115,8 +147,12 @@
           Math.abs(q[2] - prev[2]) < o.pressure + 0.02) continue;
       if (points.length > 2 &&
           flatEnough(points[points.length - 2], prev, q, o)) {
+        // Taking back a point this same batch had just added: the far end
+        // never saw it, so it is one fewer thing to send rather than one more
+        // to un-send.
+        if (kept.length && kept[kept.length - 1] === points[points.length - 1]) kept.pop();
+        else dropped++;
         points.pop();
-        dropped++;
       }
       points.push(q);
       kept.push(q);

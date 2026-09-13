@@ -34,7 +34,7 @@
       vertical-align: middle;
     }
   </style>
-  <link rel="stylesheet" href="index_files/libs/revealjs/dist/theme/quarto-0bc4ff7c0ecb1e72f8a5b55e86bf72fb.css">
+  <link rel="stylesheet" href="index_files/libs/revealjs/dist/theme/quarto-ff652bc4ecc9f242d7d521c8c611c45e.css">
   <link href="index_files/libs/revealjs/plugin/quarto-line-highlight/line-highlight.css" rel="stylesheet">
   <link href="index_files/libs/revealjs/plugin/reveal-menu/menu.css" rel="stylesheet">
   <link href="index_files/libs/revealjs/plugin/reveal-menu/quarto-menu.css" rel="stylesheet">
@@ -253,6 +253,25 @@
     if (request) request.call(shell);
   }
 
+  // The corner rail. The stage owns it because the button in it expands the
+  // shell, which only the stage knows about; a plugin that adds its own control
+  // here (annotate's pen) appends to `stage.deckLaunchers` so the row stays one
+  // row with one origin.
+  var launchers = document.createElement('div');
+  launchers.className = 'deck-launchers';
+  var full = document.createElement('button');
+  full.className = 'deck-launcher deck-launcher-fullscreen';
+  full.title = 'Full screen (f)';
+  full.setAttribute('aria-label', 'Full screen');
+  full.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M4 9V4h5"/><path d="M15 4h5v5"/><path d="M20 15v5h-5"/>' +
+    '<path d="M9 20H4v-5"/></svg>';
+  full.addEventListener('click', fullscreenStage);
+  launchers.appendChild(full);
+  stage.appendChild(launchers);
+  stage.deckLaunchers = launchers;
+
   // Capture F before Reveal's own handler, which would fullscreen only the
   // inner content frame in embedded mode.
   window.addEventListener('keydown', function (event) {
@@ -313,9 +332,10 @@
   <script src="index_files/libs/revealjs/plugin/annotate/palm-rejection-a746cc691279.js"></script>
   <script src="index_files/libs/revealjs/plugin/annotate/perfect-freehand.min.js"></script>
   <script src="index_files/libs/revealjs/plugin/annotate/annotate-geometry-43788bd40d25.js"></script>
-  <script src="index_files/libs/revealjs/plugin/annotate/annotate-model-fb38466b9605.js"></script>
+  <script src="index_files/libs/revealjs/plugin/annotate/annotate-model-3a71aa2e3281.js"></script>
+  <script src="index_files/libs/revealjs/plugin/annotate/annotate-codec-a1fb384cb9d0.js"></script>
   <script src="index_files/libs/revealjs/plugin/annotate/annotate-pdf-9ad49863bff1.js"></script>
-  <script src="index_files/libs/revealjs/plugin/annotate/annotate-1ae670087f07.js"></script>
+  <script src="index_files/libs/revealjs/plugin/annotate/annotate-c6dae8d04fea.js"></script>
   <script src="index_files/libs/revealjs/plugin/annotate/annotate-pages-2af095def630.js"></script>
   <script src="index_files/libs/revealjs/plugin/reveal-multiplex/socket.io.min.js"></script>
   <script src="index_files/libs/revealjs/plugin/reveal-multiplex/multiplex.js"></script>
@@ -340,8 +360,9 @@
 'autoAnimateDuration': 1,
 'autoAnimateUnmatched': true,
 'jumpToSlide': true,
-'menu': {"side":"left","useTextContentForMissingTitles":true,"markers":false,"loadIcons":false,"custom":[{"title":"Tools","icon":"<i class=\"fas fa-gear\"></i>","content":"<ul class=\"slide-menu-items\">\n<li class=\"slide-tool-item active\" data-item=\"0\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.fullscreen(event)\"><kbd>f</kbd> Fullscreen</a></li>\n<li class=\"slide-tool-item\" data-item=\"1\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.speakerMode(event)\"><kbd>s</kbd> Speaker View</a></li>\n<li class=\"slide-tool-item\" data-item=\"2\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.overview(event)\"><kbd>o</kbd> Slide Overview</a></li>\n<li class=\"slide-tool-item\" data-item=\"3\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.togglePdfExport(event)\"><kbd>e</kbd> PDF Export Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"4\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.toggleScrollView(event)\"><kbd>r</kbd> Scroll View Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"5\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.keyboardHelp(event)\"><kbd>?</kbd> Keyboard Help</a></li>\n</ul>"}],"openButton":true},
+'menu': {"side":"left","useTextContentForMissingTitles":true,"markers":false,"loadIcons":false,"custom":[{"title":"Tools","icon":"<i class=\"fas fa-gear\"></i>","content":"<ul class=\"slide-menu-items\">\n<li class=\"slide-tool-item active\" data-item=\"0\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.fullscreen(event)\"><kbd>f</kbd> Fullscreen</a></li>\n<li class=\"slide-tool-item\" data-item=\"1\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.speakerMode(event)\"><kbd>s</kbd> Speaker View</a></li>\n<li class=\"slide-tool-item\" data-item=\"2\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.overview(event)\"><kbd>o</kbd> Slide Overview</a></li>\n<li class=\"slide-tool-item\" data-item=\"3\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.togglePdfExport(event)\"><kbd>e</kbd> PDF Export Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"4\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.toggleScrollView(event)\"><kbd>r</kbd> Scroll View Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"5\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.keyboardHelp(event)\"><kbd>?</kbd> Keyboard Help</a></li>\n</ul>"}],"openButton":false},
 'annotate': {"tools":"open","pages":true,"pdf":"generate","pdfSource":"{deck}.pdf"},
+'multiplexRelay': {"server":null},
 'smaller': false,
  
         // Display controls in the bottom right corner

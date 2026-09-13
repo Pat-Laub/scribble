@@ -43,7 +43,7 @@ test('the tool panel and corner buttons are on screen', async ({ page }) => {
     const g = s => { const e = document.querySelector(s); if (!e) return null;
       const r = e.getBoundingClientRect();
       return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, w: r.width, h: r.height }; };
-    return { panel: g('.ink-panel'), launchers: g('.ink-launchers'),
+    return { panel: g('.ink-panel'), launchers: g('.deck-launchers'),
              viewport: { w: window.innerWidth, h: window.innerHeight } };
   });
 

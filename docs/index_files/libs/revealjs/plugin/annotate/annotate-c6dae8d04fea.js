@@ -115,7 +115,10 @@
     tolerance: 2    // simplification tolerance; ink is sampled far finer than needed
   };
   var SVG_NS = 'http://www.w3.org/2000/svg';
-  var STORE = 'reveal-ink:' + location.pathname;
+  // The format version is in the key, so ink written by an older build is not
+  // read rather than mis-read. v6 stored the points as plain JSON; v7 packs
+  // them (annotate-codec.js) and keeps every sample instead of thinning.
+  var STORE = 'reveal-ink-v7:' + location.pathname;
 
   // Which end of a multiplexed deck this is. The role is stored per device by a sign-in
   // page and read from the same localStorage keys the
@@ -127,16 +130,21 @@
   // watched -- the projector, or a window opened with ?mirror to be shown on
   // one -- and it draws nothing, keeps nothing and sends nothing of its own.
   var MUX = (function () {
-    try {
-      // Per window rather than per device, since both windows of one browser
-      // share the localStorage the role below is kept in.
-      if (new URLSearchParams(location.search).has('mirror')) return 'viewer';
-      var role = localStorage.getItem('multiplex-role');
+    // Per window rather than per device, since both windows of one browser
+    // share the localStorage the role below is kept in.
+    if (new URLSearchParams(location.search).has('mirror')) return 'viewer';
+    // Credentials handed to the page win over the stored pair, exactly as they
+    // do in multiplex.js: the two must agree, or a window follows the relay as
+    // an audience while still keeping and broadcasting ink of its own.
+    var role, handed = window.__multiplex || {};
+    if (handed.role && handed.token) role = handed.role;
+    else try {
       if (!localStorage.getItem('multiplex-token')) return null;
-      return role === 'presenter' ? 'presenter' : role === 'audience' ? 'viewer' : null;
+      role = localStorage.getItem('multiplex-role');
     } catch (e) {
       return null;  // storage blocked: an ordinary deck
     }
+    return role === 'presenter' ? 'presenter' : role === 'audience' ? 'viewer' : null;
   })();
   var PRINT = /(?:^|[?&])print-pdf(?:[=&]|$)/i.test(location.search);
   var PRINT_INK = PRINT && /(?:^|[?&])ink(?:[=&]|$)/i.test(location.search);
@@ -204,19 +212,13 @@
 
   /* ------------------------------ stroke maths --------------------------- */
 
-  // The nib a stroke was drawn with. Ink saved before strokes carried their own
-  // width falls back to the nib in hand, so an old file still draws.
-  function nib(stroke) {
-    return stroke.w > 0 ? stroke.w : widths[stroke.t];
-  }
-
   // perfect-freehand returns the stroke's outline as a polygon; draw it as a
   // path of quadratic curves through the midpoints, which rounds the corners.
   function pathData(stroke, unfinished) {
     var o = TOOLS[stroke.t];
     if (stroke.s && o.simulated) o = o.simulated;
     var pts = getStroke(stroke.p, {
-      size: nib(stroke) * (o.share || 1),
+      size: stroke.w * (o.share || 1),
       thinning: o.thinning, smoothing: o.smoothing,
       streamline: o.streamline, easing: o.easing,
       simulatePressure: stroke.s, last: !unfinished
@@ -392,7 +394,7 @@
 
   function touches(stroke, x, y) {
     if (isText(stroke)) return AnnotationGeometry.insideBounds([x, y], itemBox(stroke), ERASER);
-    var r = ERASER + nib(stroke) / 2, p = stroke.p;
+    var r = ERASER + stroke.w / 2, p = stroke.p;
     for (var i = 0; i < p.length; i++) {
       if (segDist(x, y, p[i], p[i + 1] || p[i]) <= r) return true;
     }
@@ -580,7 +582,11 @@
   }
 
   function read() {
-    try { return JSON.parse(localStorage.getItem(STORE)) || {}; } catch (e) { return {}; }
+    try {
+      return AnnotationCodec.unpackInk(JSON.parse(localStorage.getItem(STORE)) || {});
+    } catch (e) {
+      return {};
+    }
   }
 
   function readWidths() {
@@ -651,7 +657,6 @@
     widths[tool] = clampWidth(tool, Math.round(w * 10) / 10);
     try { localStorage.setItem(WIDTH_STORE, JSON.stringify(widths)); } catch (e) { /* full or blocked */ }
     sync();
-    sendAll();  // a width change applies to the viewers' next stroke too
   }
 
   function save() {
@@ -659,7 +664,7 @@
     clearTimeout(saveTimer);
     saveTimer = setTimeout(function () {
       try {
-        localStorage.setItem(STORE, JSON.stringify(kept()));
+        localStorage.setItem(STORE, JSON.stringify(AnnotationCodec.packInk(kept())));
       } catch (e) { /* full or blocked */ }
     }, 400);
   }
@@ -706,6 +711,8 @@
     if (diagnostics.length > DIAGNOSTIC_LIMIT) diagnostics.splice(0, diagnostics.length - DIAGNOSTIC_LIMIT);
   }
 
+  window.AnnotateDiagnostics = diagnosticReport;
+
   function diagnosticReport() {
     return {
       sessionStartedAt: new Date(sessionStarted).toISOString(),
@@ -733,18 +740,17 @@
   // localStorage is this browser on this machine: the ink does not follow the
   // deck to another device, and clearing site data takes it. These two put a
   // whole deck's ink in a file and read one back. The ink remains keyed by
-  // slide so it lands back where it was drawn; exports also wrap a bounded
-  // session trace that can diagnose intermittent input failures.
+  // slide so it lands back where it was drawn. The session input trace stays
+  // out of the file: read it from the console as AnnotateDiagnostics().
   function download() {
     var name = (location.pathname.split('/').pop() || 'slides').replace(/\.html?$/, '');
     var payload = {
       format: 'scribble-ink',
-      version: 6,
+      version: AnnotationCodec.VERSION,
       canvas: { width: W, height: H },
       pages: window.AnnotatePages ? AnnotatePages.count() : Reveal.getTotalSlides(),
       pageIds: window.AnnotatePages ? AnnotatePages.ids() : undefined,
-      ink: kept(),
-      diagnostics: diagnosticReport()
+      ink: AnnotationCodec.packInk(kept())
     };
     saveBlob(
       new Blob([JSON.stringify(payload)], { type: 'application/json' }),
@@ -757,12 +763,12 @@
     reader.onload = function () {
       var data;
       try { data = JSON.parse(reader.result); } catch (e) { return; }
-      if (!data || data.format !== 'scribble-ink' || data.version !== 6 ||
+      if (!data || data.format !== 'scribble-ink' || data.version !== AnnotationCodec.VERSION ||
           !data.ink || typeof data.ink !== 'object') {
         alert('This annotation file uses an unsupported format.');
         return;
       }
-      ink = data.ink;
+      ink = AnnotationCodec.unpackInk(data.ink);
       if (window.AnnotatePages) {
         if (Array.isArray(data.pageIds)) AnnotatePages.ensureIds(data.pageIds);
         AnnotatePages.ensureForKeys(Object.keys(ink));
@@ -1196,11 +1202,11 @@
     document.dispatchEvent(e);
   }
 
-  // Everything that is not a stroke in progress — an erase, an undo, a clear, a
-  // width, a load from file, parking the ink — is rare enough to state outright
+  // Everything that is not a stroke in progress — an erase, an undo, a clear,
+  // a load from file, parking the ink — is rare enough to state outright
   // rather than describe. It doubles as the answer a viewer gets when it joins.
   function sendAll() {
-    send({ a: 'all', ink: kept(), w: widths, h: hidden });
+    send({ a: 'all', ink: kept(), h: hidden });
   }
 
   // Whether this window applies what arrives is the transport's business, not
@@ -1209,9 +1215,6 @@
     if (!msg) return;
     if (msg.a === 'all') {
       ink = msg.ink || {};
-      Object.keys(WIDTHS).forEach(function (t) {
-        if (msg.w && msg.w[t] > 0) widths[t] = clampWidth(t, msg.w[t]);
-      });
       hidden = !!msg.h;
       undos = {}; redos = {};  // these describe ink that is no longer here
       incoming = {};           // and neither are the strokes these would extend
@@ -1458,8 +1461,8 @@
   // inside the deck — including a link in the middle of a paragraph — is
   // something to draw on, exactly as it was when a box over the slide took the
   // input and covered them all.
-  var CHROME = '.ink-panel, .ink-launchers, .ink-text-editor, .controls, .progress, .slide-number,' +
-    '.slide-menu, .slide-menu-button, .slide-menu-overlay, .speaker-controls';
+  var CHROME = '.ink-panel, .deck-launchers, .ink-text-editor, .controls, .progress,' +
+    '.slide-number, .speaker-controls';
 
   function ours(e) {
     if (!tool) return false;
@@ -1729,6 +1732,29 @@
     };
   }
 
+  /* ----------------------- swipes reveal never sees ---------------------- */
+
+  // The surface hangs off the stage, and the stage is reveal's parent, so a
+  // gesture that lands on the surface never reaches the swipe listeners reveal
+  // puts on `.reveal`. A finger the pen has told us not to ink is a page turn:
+  // hand reveal its own copy of the contact so touch navigation keeps working
+  // with a tool in hand.
+  function forwardSwipe(e) {
+    // The copy is dispatched on a descendant of the window these handlers
+    // capture on, so it comes straight back here. Untagged, each forward
+    // forwards itself again until the browser's dispatch depth runs out.
+    if (e.inkForwarded || !tool || e.pointerType !== 'touch' || !pen) return;
+    if (live || erasing || lasso || moving || resizing || textMoving) return;
+    var target = Reveal.getRevealElement();
+    if (!target || target.contains(surface)) return;
+    var copy = new PointerEvent(e.type, {
+      bubbles: true, pointerId: e.pointerId, pointerType: 'touch',
+      isPrimary: e.isPrimary, clientX: e.clientX, clientY: e.clientY
+    });
+    copy.inkForwarded = true;
+    target.dispatchEvent(copy);
+  }
+
   function finishGesture() {
     activePointer = null;
     var drawn = live || erasing || lasso || moving || resizing || textMoving;
@@ -1838,7 +1864,7 @@
 
   var ICONS = {
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
-    pen: '<path d="M4 20l3.6-1L19.3 7.3a1.8 1.8 0 0 0 0-2.5l-1.1-1.1a1.8 1.8 0 0 0-2.5 0L4 15.4z"/><path d="M14.9 5.6l3.5 3.5"/>',
+    pen: '<path d="M4 20l3.6-1L19.3 7.3a1.8 1.8 0 0 0 0-2.5l-1.1-1.1a1.8 1.8 0 0 0-2.5 0L4 15.4z"/><path d="M14.9 5.6l2.6 2.6"/>',
     text: '<path d="M5 5h14M12 5v14M8 19h8"/>',
     highlighter: '<path d="M6.5 14.5l6-9.5 5.5 3.7-6.2 9.8H7.6z"/><path d="M4 21h16"/>',
     eraser: '<path d="M15.6 4.4l4 4a1.6 1.6 0 0 1 0 2.2l-7.5 7.5a1.6 1.6 0 0 1-2.2 0l-4-4a1.6 1.6 0 0 1 0-2.2l7.5-7.5a1.6 1.6 0 0 1 2.2 0z"/><path d="M9 20h11"/>',
@@ -1857,8 +1883,7 @@
     download: '<path d="M12 4v11"/><path d="M8 11.5l4 4 4-4"/><path d="M4.5 19.5h15"/>',
     upload: '<path d="M12 15.5v-11"/><path d="M8 8.5l4-4 4 4"/><path d="M4.5 19.5h15"/>',
     print: '<path d="M7.5 9.5V4.5h9v5"/><path d="M7.5 17.5H5.5A1.5 1.5 0 0 1 4 16v-5A1.5 1.5 0 0 1 5.5 9.5h13A1.5 1.5 0 0 1 20 11v5a1.5 1.5 0 0 1-1.5 1.5h-2"/><path d="M7.5 14h9v5.5h-9z"/>',
-    more: '<circle cx="6" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1" fill="currentColor" stroke="none"/>',
-    fullscreen: '<path d="M4 9V4h5"/><path d="M15 4h5v5"/><path d="M20 15v5h-5"/><path d="M9 20H4v-5"/>'
+    more: '<circle cx="6" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1" fill="currentColor" stroke="none"/>'
   };
 
   function icon(name) {
@@ -1894,21 +1919,6 @@
     if (now - lastWheel < 220) return;
     lastWheel = now;
     cycleColour(e.deltaY > 0 ? 1 : -1);
-  }
-
-  // Expands the element reveal's own F shortcut expands, so the two agree about
-  // what "full screen" means; unlike reveal's, this one also comes back out.
-  function fullscreen() {
-    if (document.fullscreenElement || document.webkitFullscreenElement) {
-      var exit = document.exitFullscreen || document.webkitExitFullscreen;
-      if (exit) exit.call(document);
-      return;
-    }
-    var view = Reveal.getViewportElement();
-    var el = Reveal.getConfig().embedded ? view : view.parentElement;
-    var req = el.requestFullscreen || el.webkitRequestFullscreen ||
-      el.mozRequestFullScreen || el.msRequestFullscreen;
-    if (req) req.call(el);
   }
 
   function open(on) {
@@ -2127,9 +2137,9 @@
     // navigation reads the same pointer events, so a stroke can be kept from
     // it by stopping propagation (down(), move() and up() do).
     var input = {
-      pointerdown: function (e) { pointers = true; down(e); },
-      pointermove: move,
-      pointerup: up,
+      pointerdown: function (e) { pointers = true; down(e); forwardSwipe(e); },
+      pointermove: function (e) { move(e); forwardSwipe(e); },
+      pointerup: function (e) { up(e); forwardSwipe(e); },
       pointercancel: up,
       touchstart: touchDown,
       touchmove: touchMove,
@@ -2265,7 +2275,7 @@
     // already in hand, and a button to open them would do nothing.
     if (!toolsOpen) {
       toggle = document.createElement('button');
-      toggle.className = 'ink-toggle ink-pen';
+      toggle.className = 'deck-launcher ink-toggle ink-pen';
       toggle.title = 'Annotate (d), hide the ink (v)';
       toggle.innerHTML = icon('pen');
       toggle.addEventListener('click', function () {
@@ -2274,22 +2284,19 @@
       });
     }
 
-    var full = document.createElement('button');
-    full.className = 'ink-toggle';
-    full.title = 'Full screen (f)';
-    full.innerHTML = icon('fullscreen');
-    full.addEventListener('click', fullscreen);
-
-    var launchers = document.createElement('div');
-    launchers.className = 'ink-launchers';
-    // Sit clear of the menu plugin's button, which shares this corner.
-    if (document.querySelector('.slide-menu-button')) launchers.classList.add('ink-offset');
-    launchers.appendChild(full);
-    if (toggle) launchers.appendChild(toggle);
-
     var parent = document.querySelector('[data-deck-stage]') || Reveal.getRevealElement();
     parent.appendChild(panel);
-    parent.appendChild(launchers);
+    // The stage owns the corner row and the full-screen button in it; the pen
+    // joins that row rather than opening a second one in the same corner.
+    if (toggle) {
+      var launchers = parent.deckLaunchers;
+      if (!launchers) {
+        launchers = document.createElement('div');
+        launchers.className = 'deck-launchers';
+        parent.appendChild(launchers);
+      }
+      launchers.appendChild(toggle);
+    }
 
     panel.addEventListener('click', function (e) {
       var b = e.target.closest('[data-tool],[data-act],[data-colour]');

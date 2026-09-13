@@ -13,6 +13,10 @@ $content-top: 120px !default;
 $content-right: 336px !default;  // 96px gap + the rail
 $content-bottom: 141px !default;
 $rail-width: 240px !default;
+// The corner row is tapped with a finger; 168 authored px is the 44pt Apple
+// asks for once the canvas is scaled down to an iPad.
+$launcher-size: 168px !default;
+$launcher-icon: 120px !default;
 $artwork-inset: 48px !default;
 $content-width: $deck-width - $content-left - $content-right;
 $content-height: $deck-height - $content-top - $content-bottom;
@@ -159,11 +163,6 @@ body.quarto-light {
     position: absolute !important;
     right: -#{$content-right - ($rail-width * 0.07)} !important;
     bottom: -#{$content-bottom} !important;
-  }
-  .slide-menu-button {
-    position: absolute !important;
-    left: #{24px - $content-left} !important;
-    bottom: #{42.6px - $content-bottom} !important;
   }
 }
 
@@ -528,4 +527,43 @@ html.reveal-print {
 // it stops the `::after` strip from being hit too.
 .reveal .progress {
   pointer-events: none;
+}
+
+// The corner rail, in authored page units like the rest of the stage: a length
+// meant for a browser-sized page comes out at a fraction of everything beside
+// it once the stage is scaled to the window. Plugins append their own controls
+// to this row rather than opening a second one in the same corner.
+.deck-stage > .deck-launchers {
+  --deck-launcher: #{$launcher-size};
+
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  z-index: 30;
+  display: flex;
+}
+
+.deck-stage .deck-launcher {
+  display: grid;
+  place-items: center;
+  width: var(--deck-launcher);
+  height: var(--deck-launcher);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: $link-color;
+  cursor: pointer;
+
+  svg {
+    width: $launcher-icon;
+    height: $launcher-icon;
+  }
+}
+
+// Presentation controls, not content: keep them out of the printed deck and out
+// of the overview grid, where one row would sit over a whole grid of slides.
+.print-pdf .deck-launchers,
+.reveal.overview ~ .deck-launchers,
+.deck-stage-overview > .deck-launchers {
+  display: none !important;
 }

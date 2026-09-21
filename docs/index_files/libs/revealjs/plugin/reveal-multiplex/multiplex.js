@@ -33,24 +33,67 @@ window.RevealMultiplex = {
 		var EVENTS = [ 'slidechanged', 'fragmentshown', 'fragmenthidden', 'overviewshown',
 			'overviewhidden', 'paused', 'resumed' ];
 
-		/* ----------------------- the window next to this one ------------------ */
-		// Two windows of the same deck in one browser -- one of them dragged onto an
-		// external monitor -- need no relay between them: BroadcastChannel carries
-		// the same messages straight across, same origin, same device. Every window
-		// both talks and listens, so whichever one you touch is the one that leads
-		// and there is nothing to set up or remember.
+		/* ------------------------------ the role ------------------------------ */
+		// One pair of words covers both transports below: a presenter drives, an
+		// audience follows, and a follower puts nothing out on either of them.
 		//
-		// `?mirror` on the end of the address is optional, and only for a window
-		// that is being projected: it takes the audience view's bare chrome and
-		// stops driving, so a stray click on that screen cannot move the lecture.
-		var mirror = false;
-		try { mirror = new URLSearchParams( location.search ).has( 'mirror' ); } catch ( e ) {}
-		if ( mirror ) document.documentElement.classList.add( 'multiplex-audience' );
+		// The course site hands a staff session its credentials in the page
+		// itself, on `?present` or `?project`: no login page, no 180-day token
+		// sitting in a browser, and nothing to have set up on the right device
+		// beforehand. The localStorage pair is the older path and still works,
+		// which is what keeps the published decks and the login page usable until
+		// the new site is the only way in.
+		//
+		// `?project` is the site's word for the screen being watched, and it means
+		// the same typed by hand on a deck this device has no credentials for:
+		// that window follows and puts nothing out. Signed in, it follows the
+		// relay too, which is the projector in the theatre; otherwise it follows
+		// the windows beside it, which is a second window of this browser dragged
+		// onto a monitor -- the channel reaches it there, and there is nothing to
+		// sign in to.
+		var projected = false;
+		try { projected = new URLSearchParams( location.search ).has( 'project' ); } catch ( e ) {}
+
+		var handed = window.__multiplex || {};
+		var role = handed.role, token = handed.token;
+		if ( !role || !token ) {
+			try {
+				role = localStorage.getItem( 'multiplex-role' );
+				token = localStorage.getItem( 'multiplex-token' );
+			} catch ( e ) {}              // storage blocked: behave as an ordinary deck
+		}
+		if ( ( role !== 'presenter' && role !== 'audience' ) || !token ) {
+			role = null;
+			token = null;
+		}
+		if ( projected && role !== 'audience' ) {
+			role = 'audience';
+			token = null;                 // this window was not signed in as one
+		}
+
+		// The audience view's bare chrome: this screen is being watched rather
+		// than written on, whichever way it was told so.
+		if ( role === 'audience' ) document.documentElement.classList.add( 'multiplex-audience' );
+
+		// Annotate and Display are the same deck with the same chrome, and the
+		// only way to tell them apart is to draw on one. On the iPad that makes
+		// a Display window indistinguishable from a Pencil that has stopped
+		// working. Each window says what it is as it opens and then goes away
+		// again: a projected screen is not to carry a permanent caption.
+		if ( role ) sayMode( role === 'presenter' ? 'Annotate \u2014 you are presenting'
+			: 'Display \u2014 following the presenter' );
 
 		// Whether a message about the wrong deck is worth saying out loud. On a
 		// projected screen it is; on someone's second tab it would only be a
 		// caption appearing every time they moved in the first one.
-		var announce = mirror;
+		var announce = role === 'audience';
+
+		/* ----------------------- the window next to this one ------------------ */
+		// Two windows of the same deck in one browser -- one of them dragged onto an
+		// external monitor -- need no relay between them: BroadcastChannel carries
+		// the same messages straight across, same origin, same device. A deck with
+		// no role given to it both talks and listens, so whichever one you touch is
+		// the one that leads and there is nothing to set up or remember.
 
 		// Set while a message off the channel is being applied, because applying one
 		// moves this deck, and moving this deck is what sends messages. Without it a
@@ -73,7 +116,7 @@ window.RevealMultiplex = {
 			channel.onmessage = function ( e ) {
 				if ( !e.data ) return;
 				if ( e.data.sync ) {
-					if ( mirror ) return;      // a mirror has nothing of its own to answer with
+					if ( role === 'audience' ) return;   // a follower has nothing of its own to answer with
 					document.dispatchEvent( new CustomEvent( 'welcome' ) );
 					broadcast();
 					return;
@@ -90,31 +133,59 @@ window.RevealMultiplex = {
 			hello();
 			document.addEventListener( 'rejoin', hello );
 
-			if ( !mirror ) {
+			if ( role !== 'audience' ) {
 				EVENTS.forEach( function ( name ) { deck.on( name, broadcast ); } );
 				document.addEventListener( 'send', broadcast );
 			}
 		}
 
-		if ( mirror ) return;                 // and it drives the relay no more than the channel
+		/* -------------------- browsing away from the presenter ---------------- */
+		// A window that is only watching still has a reason to look back a
+		// slide, and being dragged forward again by the next message is worse
+		// than not moving at all. One moved by hand stops following, says so,
+		// and keeps the way back one tap away -- which is also what an iPad
+		// accidentally opened in Display mode looks like: the first swipe
+		// announces it rather than silently doing nothing.
+		//
+		// Only the slide is held back. Ink keeps arriving and is drawn on the
+		// slide it was made on, so returning live finds the deck written up to
+		// date rather than replaying the interval.
+		var detached = false, missed = null, chip = null;
+
+		if ( role === 'audience' ) deck.on( 'ready', function () {
+			deck.on( 'slidechanged', function () { if ( !applying ) detach(); } );
+		} );
+
+		function detach() {
+			if ( detached ) return;
+			detached = true;
+			if ( !chip ) {
+				chip = document.createElement( 'div' );
+				chip.className = 'multiplex-detached';
+				chip.textContent = 'Not following presenter';
+				var back = document.createElement( 'button' );
+				back.type = 'button';
+				back.textContent = 'Return live';
+				back.addEventListener( 'click', follow );
+				chip.appendChild( back );
+				document.body.appendChild( chip );
+			}
+			chip.hidden = false;
+		}
+
+		function follow() {
+			detached = false;
+			if ( chip ) chip.hidden = true;
+			place( missed );
+			missed = null;
+			// Nothing was missed if the presenter has not moved since, and this
+			// window is then sitting on a slide it chose by hand: ask.
+			document.dispatchEvent( new CustomEvent( 'rejoin' ) );
+		}
 
 		/* ----------------------------- the relay ------------------------------ */
 
-		// The course site hands a staff session its credentials in the page
-		// itself, on `?present` or `?project`: no login page, no 180-day token
-		// sitting in a browser, and nothing to have set up on the right device
-		// beforehand. The localStorage pair is the older path and still works,
-		// which is what keeps the published decks and the login page usable
-		// until the new site is the only way in.
-		var handed = window.__multiplex || {};
-		var role = handed.role, token = handed.token;
-		if ( !role || !token ) {
-			try {
-				role = localStorage.getItem( 'multiplex-role' );
-				token = localStorage.getItem( 'multiplex-token' );
-			} catch ( e ) { return; }         // storage blocked: behave as an ordinary deck
-		}
-		if ( ( role !== 'presenter' && role !== 'audience' ) || !token ) return;
+		if ( !token ) return;                 // nothing to sign in with: this deck talks to its own browser and no further
 
 		var debug = false;
 		try { debug = !!localStorage.getItem( 'multiplex-debug' ); } catch ( e ) {}
@@ -161,9 +232,6 @@ window.RevealMultiplex = {
 			if ( debug ) probe( socket, post );
 
 		} else {
-			document.documentElement.classList.add( 'multiplex-audience' );
-			announce = true;                  // this screen is the one being projected
-
 			var ask = function () { socket.emit( 'sync' ); };
 			socket.on( 'connect', ask );
 			document.addEventListener( 'rejoin', ask );
@@ -192,9 +260,9 @@ window.RevealMultiplex = {
 		}
 
 		/* ---------------------------- following ------------------------------- */
-		// Shared by the relay's audience and by a mirror window, which differ only
-		// in how the message got here: `local` says it came over the channel, and
-		// travelled no further than this device.
+		// Shared by both transports, which differ only in how the message got
+		// here: `local` says it came over the channel, and travelled no further
+		// than this device.
 		function apply( message, local ) {
 			if ( !message ) return;
 			if ( message.path && message.path !== path ) {
@@ -202,13 +270,26 @@ window.RevealMultiplex = {
 				return;
 			}
 			clearNotice();
-			if ( message.state && moved( message.state ) ) deck.setState( message.state );
+			if ( detached ) missed = message.state || missed;
+			else place( message.state );
 			if ( message.content ) {
 				var event = new CustomEvent( 'received' );
 				event.content = message.content;
 				event.local = local;
 				document.dispatchEvent( event );
 			}
+		}
+
+		// Moving this deck is what sends messages and, on a window that is only
+		// watching, what detaches it -- so every move made on this deck's
+		// behalf goes through here, saying so while it happens. Saved and
+		// restored rather than cleared: the channel already sets it around the
+		// whole of apply().
+		function place( state ) {
+			if ( !state || !moved( state ) ) return;
+			var was = applying;
+			applying = true;
+			try { deck.setState( state ); } finally { applying = was; }
 		}
 
 		// Whether that message is about a slide we are not on. Every ink packet
@@ -272,6 +353,15 @@ window.RevealMultiplex = {
 
 		/* ------------------------- the audience notice ------------------------- */
 		// Deliberately small and quiet: this view is on a projector.
+
+		function sayMode( text ) {
+			var MODE_MS = 4000;   // long enough to read, short enough to miss
+			var caption = document.createElement( 'div' );
+			caption.className = 'multiplex-mode';
+			caption.textContent = text;
+			document.body.appendChild( caption );
+			setTimeout( function () { caption.remove(); }, MODE_MS );
+		}
 
 		var box;
 		function notice( text ) {

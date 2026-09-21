@@ -1,6 +1,6 @@
-// How saved ink is written down. Storage only: the multiplex wire and the
-// in-memory strokes are untouched, so a viewer is never handed numbers the
-// presenter's pen did not produce.
+// How saved ink is written down, and how a whole deck's worth of it travels to
+// a viewer that has just joined. The in-memory strokes are untouched; a stroke
+// still being drawn goes on the wire point by point, unpacked.
 //
 // A stroke used to be stored as JSON -- `[1392.4,276,0.41]`, about 19.5 bytes a
 // point measured over a real page of handwriting -- and two sampling rules
@@ -22,10 +22,10 @@
 // Base64 over that is about 7 bytes a point: a third of what the JSON cost, so
 // every sample can now be kept for less than the thinned ones used to cost.
 //
-// Round-tripping is exact, and `test/annotate-codec.test.js` is where that is
-// held. Nothing here is allowed to become lossy: the wire carries unpacked
-// points, so any rounding introduced on this side would put a viewer's copy of
-// a stroke somewhere other than the presenter's.
+// Round-tripping is exact for anything the capture path produced, and
+// `test/annotate-codec.test.js` is where that is held. Points built rather than
+// drawn -- a stroke that has been moved or resized -- are rounded to the same
+// tenth, which is what the presenter's own reload has always given them.
 (function (root, factory) {
   var api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;

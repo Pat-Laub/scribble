@@ -28,8 +28,8 @@
   /* ---------------------------- configuration ---------------------------- */
 
   var COLOURS = [
-    ['Black', '#252525'], ['Red', '#d94827'], ['Blue', '#2668c7'],
-    ['Green', '#0f9d58'], ['Orange', '#e8710a']
+    ['Black', '#252525'], ['Blue', '#2668c7'], ['Green', '#0f9d58'],
+    ['Orange', '#e8710a'], ['Red', '#d94827']
   ];
 
   // How wide each tool draws, in slide coordinates. These defaults are tuned
@@ -69,6 +69,10 @@
   // words it is meant to pick out. The first swatch draws — and shows itself
   // as — the colour a highlighter actually is while that tool is in hand.
   var HIGHLIGHT = '#facc15';
+  // The two tools whose icon carries a colour of its own. The pen has none --
+  // it draws in whichever swatch is picked, so colouring it would be a claim
+  // the tool does not make.
+  var RUBBER = '#f9a8d4';
 
   var ERASER = 10;      // eraser hit radius, in slide coordinates
   var RESIZE_HANDLE = 12; // selection-corner display and touch hit radius
@@ -101,14 +105,26 @@
   // Scribbling over a mistake is the gesture everyone already makes on paper,
   // and it saves reaching for the eraser and back mid-sentence. The thresholds
   // below keep it a narrow gesture: a stroke that sweeps back along its own
-  // long axis at least three times *and* crosses one stroke's ink repeatedly.
-  // An advancing zigzag or a sine wave progresses steadily along its long axis
-  // and so is not a scribble, which is how a sketched waveform stays a sketch;
-  // and because the crossings are counted per stroke, a slash through an
-  // equation or an arrow across a derivation never adds up to a trigger.
+  // long axis several times, gets nowhere doing it, *and* crosses one stroke's
+  // ink repeatedly. An advancing zigzag or a sine wave progresses steadily
+  // along its long axis and so is not a scribble, which is how a sketched
+  // waveform stays a sketch; and because the crossings are counted per stroke,
+  // a slash through an equation or an arrow across a derivation never adds up
+  // to a trigger.
+  //
+  // `reversals` was 2 -- a Z -- and `progress` did not exist. Handwriting
+  // reverses far more than that suggests: over a lecture's 2208 strokes, 491
+  // of them cleared a threshold of 2, and the only thing standing between them
+  // and an erase was the crossing count, which one stroke came within one of
+  // reaching. A capital B written spine-first cleared all three: its bowls
+  // meet the spine at the top, the waist and the foot, and the climb back to
+  // the top to start them reads as the doubling back. `progress` is what tells
+  // the two apart -- a scribble sweeps without travelling, and the same
+  // lecture's near miss scored 0.006 against a B's 0.145 at worst.
   var SCRIBBLE = {
-    reversals: 2,   // direction reversals along the long axis; 2 is a Z
+    reversals: 4,   // direction reversals along the long axis
     travel: 10,     // how far a reversal must go to be one, not end-of-stroke wobble
+    progress: 0.09, // net displacement over path length: a scribble goes nowhere
     overlap: 0.5,   // bounding-box overlap needed before counting crossings
     crossings: 3,   // crossings with a *single* stroke before it is erased
     slack: 4,       // padding on every box, so a straight stroke has an area
@@ -119,6 +135,13 @@
   // read rather than mis-read. v6 stored the points as plain JSON; v7 packs
   // them (annotate-codec.js) and keeps every sample instead of thinning.
   var STORE = 'reveal-ink-v7:' + location.pathname;
+  // What the ink store deliberately forgets. An export used to be the state the
+  // slides ended in; a stroke that was rubbed out left no trace, so the one
+  // thing a misfiring gesture produces -- the stroke it took, and the scribble
+  // that took it -- was exactly what could not be looked at afterwards. This
+  // keeps them, packed the same way and beside the rest, so a lecture exports
+  // as what happened rather than as what survived.
+  var ERASED_STORE = 'reveal-ink-erased-v7:' + location.pathname;
 
   // Which end of a multiplexed deck this is. The role is stored per device by a sign-in
   // page and read from the same localStorage keys the
@@ -127,12 +150,12 @@
   //
   // Every window takes what the multiplex plugin hands it, whatever this says.
   // What this decides is what a window puts back: a viewer is a screen being
-  // watched -- the projector, or a window opened with ?mirror to be shown on
-  // one -- and it draws nothing, keeps nothing and sends nothing of its own.
+  // watched -- the projector, or a second window of this browser shown on one --
+  // and it draws nothing, keeps nothing and sends nothing of its own.
   var MUX = (function () {
-    // Per window rather than per device, since both windows of one browser
-    // share the localStorage the role below is kept in.
-    if (new URLSearchParams(location.search).has('mirror')) return 'viewer';
+    // `?project` says so per window rather than per device, which the stored
+    // role below cannot: both windows of one browser share that localStorage.
+    if (new URLSearchParams(location.search).has('project')) return 'viewer';
     // Credentials handed to the page win over the stored pair, exactly as they
     // do in multiplex.js: the two must agree, or a window follows the relay as
     // an audience while still keeping and broadcasting ink of its own.
@@ -151,11 +174,18 @@
   var RULE_STORE = 'reveal-ink-rules';
   var RULE_SPACING_STORE = 'reveal-ink-rule-spacing';
   var PRESSURE_STORE = 'reveal-ink-pressure';
+  var DELAY_STORE = 'reveal-ink-multiplex-delay';
+
+  // How long a viewer holds each packet of a stroke before drawing it, in
+  // milliseconds, and the settings the more menu offers. See the multiplexing
+  // section for what the wait buys.
+  var DELAY = 20;
+  var DELAYS = [ 0, 10, 20, 40, 80 ];
   var DIAGNOSTIC_LIMIT = 12000;
   // Centre ordinary light Pencil writing near perfect-freehand's neutral 0.5
   // width, while retaining useful room on either side for pressure variation.
   var PRESSURE = { enabledByDefault: true, baseline: 0.35, scale: 0.75 };
-  var RULES = { spacing: 52, min: 28, max: 92, step: 8, margin: 64 };
+  var RULES = { spacing: 92, min: 60, max: 124, step: 8, margin: 64 };
   var TEXT = { size: 34, width: 360, lineHeight: 1.25, padding: 0.16, dragThreshold: 6 };
 
   /* -------------------------------- state -------------------------------- */
@@ -173,11 +203,11 @@
   var toolsOpen = false;
   var tool = null;
   var lastTool = 'pen';      // restored after temporarily hiding the tools
-  var hidden = false;        // the ink is parked, showing the slide underneath
   var chrome = MUX !== 'viewer';  // the bottom-left corner buttons are on show
   var ruled = readRules();    // local view preference; never part of shared ink
   var ruleSpacing = readRuleSpacing(); // browser-local guide density
   var pressureEnabled = readPressure(); // captured into each new stroke's points
+  var playDelay = readDelay();  // presenter's choice; viewers are told it
   var colour = COLOURS[0][1];
   var moreOpen = false;       // session controls expand beside the writing rail
   var lastWheel = 0;          // one colour step per physical wheel gesture
@@ -186,6 +216,9 @@
   var held = null;           // the tool the right button borrowed the eraser from
   var armed = false;         // the live stroke has been recognised as a scribble
   var marked = [];           // strokes the eraser or scribble takes when let go
+  // Ink a scribble on *another* window has marked. Held against the strokes
+  // rather than their paths, which a slide change or a redraw replaces.
+  var fading = new WeakSet();
   var selected = [];         // strokes enclosed by the current lasso
   var lasso = null;          // { p, el } while a selection loop is being drawn
   var moving = null;         // original points while selected strokes are dragged
@@ -194,7 +227,8 @@
   var editing = null;        // in-place textarea and its uncommitted text-box draft
   var clipboard = null;      // copied strokes survive slide changes for this session
   var nodes = new WeakMap(); // annotation -> its SVG element
-  var thinned = new WeakMap();// stroke -> its simplified points
+  var thinned = new WeakMap();         // stroke -> its simplified points
+  var overviewPoints = new WeakMap();  // the same, thinned for a preview cell
   var layers = {};           // one SVG per rendered annotation type; see build()
   var view;                  // every layer's viewBox, in slide coordinates
   // On an iPad this deck assumes an Apple Pencil is available, so fingers are
@@ -203,17 +237,28 @@
   var pen = AnnotationModel.isIPad(navigator);
   var stylus = false;        // the stroke in hand has a pressure of its own
   var pointers = false;      // pointer events arrive here, so touches are ignored
+  var pointerId = null;      // the contact the last pointerdown was for
   var touching = null;       // identifier of the touch a stroke is being drawn with
   var activePointer = null;  // only this contact may move or finish the live gesture
   var hovers = 0;            // consecutive hovering mouse moves; see hover()
   var sessionStarted = Date.now();
+  var erased = MUX === 'viewer' ? {} : readErased();   // slide key -> strokes rubbed out, in the order they went
+  var lastRub = null;     // the erase an undo would reverse, so a misfire can be marked as one
   var diagnostics = [];      // bounded, session-only input trace; exported with ink
   var W, H, slides, surface, panel, picker, toggle, guide, rulesPath, selectionLayer, selectionBox, saveTimer;
+  var storageFull = false;   // the last save hit the origin's quota
 
   /* ------------------------------ stroke maths --------------------------- */
 
   // perfect-freehand returns the stroke's outline as a polygon; draw it as a
   // path of quadratic curves through the midpoints, which rounds the corners.
+  // A coordinate is written to the nearest tenth of a page unit, which on the
+  // stage's 3744-unit page is a fraction of a device pixel. Left alone these
+  // come out of perfect-freehand as full doubles, and a page of handwriting is
+  // then a megabyte of digits nobody can see -- which the overview, holding a
+  // copy of every page at once, pays for all at once.
+  function round(n) { return Math.round(n * 10) / 10; }
+
   function pathData(stroke, unfinished) {
     var o = TOOLS[stroke.t];
     if (stroke.s && o.simulated) o = o.simulated;
@@ -224,10 +269,10 @@
       simulatePressure: stroke.s, last: !unfinished
     });
     if (!pts.length) return '';
-    var d = ['M', pts[0][0], pts[0][1], 'Q'];
+    var d = ['M', round(pts[0][0]), round(pts[0][1]), 'Q'];
     for (var i = 0; i < pts.length; i++) {
       var a = pts[i], b = pts[(i + 1) % pts.length];
-      d.push(a[0], a[1], (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+      d.push(round(a[0]), round(a[1]), round((a[0] + b[0]) / 2), round((a[1] + b[1]) / 2));
     }
     return d.join(' ') + ' Z';
   }
@@ -262,19 +307,24 @@
     return { t: stroke.t, c: stroke.c, w: stroke.w, s: stroke.s, p: stroke.p.slice(from, to) };
   }
 
-  function Trail(stroke, layer) {
+  // `adopt` is the path render() has already put down for this stroke: a
+  // render mid-stroke replaces the layer's children, so drawing into a fresh
+  // element of our own would leave that one standing beside it.
+  function Trail(stroke, layer, adopt) {
     this.stroke = stroke;
     this.layer = layer;
     this.base = 0;        // where the tail starts, in the stroke's points
     this.pieces = [];
-    this.el = pathFor(stroke, true);
-    layer.appendChild(this.el);
+    this.faded = false;   // an armed scribble; the pieces still to come fade too
+    this.el = adopt || pathFor(stroke, true);
+    if (!adopt) layer.appendChild(this.el);
   }
 
   Trail.prototype.draw = function () {
     if (this.stroke.p.length - this.base > CHUNK + OVERLAP) {
       var cut = this.base + CHUNK;
       var piece = pathFor(part(this.stroke, this.base, cut + OVERLAP), true);
+      if (this.faded) piece.classList.add('ink-fading');
       this.layer.insertBefore(piece, this.el);
       this.pieces.push(piece);
       this.base = cut;
@@ -291,6 +341,7 @@
   };
 
   Trail.prototype.fade = function () {
+    this.faded = true;
     this.el.classList.add('ink-fading');
     this.pieces.forEach(function (el) { el.classList.add('ink-fading'); });
   };
@@ -369,7 +420,9 @@
   }
 
   function elementFor(annotation, unfinished) {
-    return isText(annotation) ? textFor(annotation) : pathFor(annotation, unfinished);
+    var el = isText(annotation) ? textFor(annotation) : pathFor(annotation, unfinished);
+    if (fading.has(annotation)) el.classList.add('ink-fading');
+    return el;
   }
 
   function updateElement(annotation) {
@@ -485,6 +538,18 @@
     return n;
   }
 
+  // How far a stroke got, against how far it went to get there. A scribble
+  // sweeps back and forth over one spot and so scores near zero; a letter,
+  // however much it doubles back on its way, still ends up somewhere.
+  function progress(p) {
+    var path = 0;
+    for (var i = 1; i < p.length; i++) {
+      path += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+    }
+    if (!path) return 1;
+    return Math.hypot(p[p.length - 1][0] - p[0][0], p[p.length - 1][1] - p[0][1]) / path;
+  }
+
   // Segment-segment crossings between two polylines, up to `limit` — the caller
   // only asks whether there are at least that many, so stop counting there.
   function crossings(a, b, limit) {
@@ -522,6 +587,7 @@
   // redo branch we are about to diverge from. Every slide has its own stacks,
   // so a change to another slide's ink says which.
   function snapshot(key) {
+    lastRub = null;   // whatever is happening now, it is not undoing that erase
     key = key || slideKey();
     var stack = undos[key] = undos[key] || [];
     stack.push(JSON.stringify(ink[key] || []));
@@ -533,6 +599,10 @@
   function step(from, to) {
     var key = slideKey();
     if (!from[key] || !from[key].length) return;
+    if (from === undos && lastRub && lastRub.key === key) {
+      lastRub.records.forEach(function (rec) { rec.x.u = 1; });
+      lastRub = null;
+    }
     (to[key] = to[key] || []).push(JSON.stringify(ink[key] || []));
     ink[key] = JSON.parse(from[key].pop());
     render();
@@ -589,6 +659,17 @@
     }
   }
 
+  // A lecture is not one page load: the deck gets reloaded mid-lecture, and a
+  // log that started again each time would miss exactly the misfires worth
+  // having. Nothing reads this back into `ink` -- it is only ever exported.
+  function readErased() {
+    try {
+      return AnnotationCodec.unpackInk(JSON.parse(localStorage.getItem(ERASED_STORE)) || {});
+    } catch (e) {
+      return {};
+    }
+  }
+
   function readWidths() {
     var out = {}, saved;
     try { saved = JSON.parse(localStorage.getItem(WIDTH_STORE)); } catch (e) { /* unreadable */ }
@@ -598,8 +679,15 @@
     return out;
   }
 
+  // The guides are for the person writing. An audience window is watching, so
+  // it starts clean and keeps nothing: the store is shared with the presenting
+  // window on the same device, and the projector is not to inherit its choice.
+  // R still works there, for that window alone.
   function readRules() {
-    try { return localStorage.getItem(RULE_STORE) === 'true'; } catch (e) { return false; }
+    var saved;
+    if (MUX === 'viewer') return false;
+    try { saved = localStorage.getItem(RULE_STORE); } catch (e) { return true; }
+    return saved === null ? true : saved === 'true';
   }
 
   function readRuleSpacing() {
@@ -614,6 +702,22 @@
     return saved === null || saved === undefined ? PRESSURE.enabledByDefault : saved === 'true';
   }
 
+  function readDelay() {
+    var saved;
+    try { saved = parseFloat(localStorage.getItem(DELAY_STORE)); } catch (e) { /* blocked */ }
+    return DELAYS.indexOf(saved) >= 0 ? saved : DELAY;
+  }
+
+  // The presenter's own windows keep the choice; a viewer is told it and does
+  // not write it down, so it goes back to following whoever presents next.
+  function stepDelay(longer) {
+    var at = DELAYS.indexOf(playDelay);
+    playDelay = DELAYS[Math.min(DELAYS.length - 1, Math.max(0, at + (longer ? 1 : -1)))];
+    try { localStorage.setItem(DELAY_STORE, playDelay); } catch (e) { /* full or blocked */ }
+    send({ a: 'delay', d: playDelay });
+    sync();
+  }
+
   function togglePressure() {
     pressureEnabled = !pressureEnabled;
     try { localStorage.setItem(PRESSURE_STORE, pressureEnabled); } catch (e) { /* full or blocked */ }
@@ -622,7 +726,9 @@
 
   function toggleRules() {
     ruled = !ruled;
-    try { localStorage.setItem(RULE_STORE, ruled); } catch (e) { /* full or blocked */ }
+    if (MUX !== 'viewer') {
+      try { localStorage.setItem(RULE_STORE, ruled); } catch (e) { /* full or blocked */ }
+    }
     renderOverview();
     sync();
   }
@@ -659,13 +765,29 @@
     sync();
   }
 
+  // A full store and a blocked one throw the same way and mean different
+  // things: the first stops keeping ink that is still on screen, so it has to
+  // be said out loud; the second was never going to keep it, and saying so on
+  // every save is noise.
+  function isFull(e) {
+    return !!e && (e.name === 'QuotaExceededError' ||
+      e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22);
+  }
+
   function save() {
     if (MUX === 'viewer') return;  // the presenter's ink is not this browser's to keep
     clearTimeout(saveTimer);
     saveTimer = setTimeout(function () {
+      var full = false;
       try {
         localStorage.setItem(STORE, JSON.stringify(AnnotationCodec.packInk(kept())));
-      } catch (e) { /* full or blocked */ }
+        localStorage.setItem(ERASED_STORE, JSON.stringify(AnnotationCodec.packInk(erased)));
+      } catch (e) {
+        full = isFull(e);
+      }
+      if (full === storageFull) return;
+      storageFull = full;
+      sync();
     }, 400);
   }
 
@@ -680,8 +802,7 @@
       tool: tool, slide: slideKey(), activePointer: activePointer,
       live: !!live, erasing: erasing, lasso: !!lasso, moving: !!moving,
       resizing: !!resizing,
-      touching: touching, held: held, penSeen: pen, pointersSeen: pointers,
-      hidden: hidden
+      touching: touching, held: held, penSeen: pen, pointersSeen: pointers
     };
   }
 
@@ -748,6 +869,8 @@
       format: 'scribble-ink',
       version: AnnotationCodec.VERSION,
       canvas: { width: W, height: H },
+      scribble: SCRIBBLE,   // the thresholds these strokes were judged against
+      erased: AnnotationCodec.packInk(erased),
       pages: window.AnnotatePages ? AnnotatePages.count() : Reveal.getTotalSlides(),
       pageIds: window.AnnotatePages ? AnnotatePages.ids() : undefined,
       ink: AnnotationCodec.packInk(kept())
@@ -1099,6 +1222,7 @@
     }
     render();
     save();
+    sendAll();
   }
 
   function editText(point) {
@@ -1175,12 +1299,15 @@
   // is the trade in full: a viewer is this far behind the pen on top of the
   // wire, and buys back the unevenness of everything that arrives within it.
   // Twenty milliseconds is barely over one frame — near enough to live, and it
-  // leaves anything but the smallest jitter to come through as jitter.
+  // leaves anything but the smallest jitter to come through as jitter. How much
+  // of the trade is worth making depends on the wire, so the more menu offers a
+  // few settings either side of it, zero included: the delay is the viewer's
+  // behaviour but the presenter's choice, and travels to viewers like the ink.
   //
-  // None of which applies to a mirror window on the same device: nothing is on
-  // the wire, so there is no unevenness to smooth out and no reason to be late.
+  // None of which applies to a window on the same device: nothing is on the
+  // wire, so there is no unevenness to smooth out and no reason to be late.
   // Those strokes are drawn as they land, a frame at a time.
-  var DELAY = 20;
+  // The settings are DELAYS, up with the other constants.
 
   // Monotonic where it exists: a stroke's offsets are differences taken on one
   // device, and a clock the OS may step is a poor thing to take them from.
@@ -1203,10 +1330,15 @@
   }
 
   // Everything that is not a stroke in progress — an erase, an undo, a clear,
-  // a load from file, parking the ink — is rare enough to state outright
-  // rather than describe. It doubles as the answer a viewer gets when it joins.
+  // a load from file — is rare enough to state outright rather than describe.
+  // It doubles as the answer a viewer gets when it joins, which is a whole
+  // lecture's ink: packed, the same way it is written to localStorage, since a
+  // point costs about 7 bytes that way against 19.5 as JSON. Round-tripping is
+  // exact for anything a pen drew; a stroke that has been moved or resized can
+  // land a twentieth of a page unit away, which is the precision localStorage
+  // has always given the presenter's own reload.
   function sendAll() {
-    send({ a: 'all', ink: kept(), h: hidden });
+    send({ a: 'all', ink: AnnotationCodec.packInk(kept()), d: playDelay });
   }
 
   // Whether this window applies what arrives is the transport's business, not
@@ -1214,15 +1346,17 @@
   function receive(msg, local) {
     if (!msg) return;
     if (msg.a === 'all') {
-      ink = msg.ink || {};
-      hidden = !!msg.h;
+      ink = AnnotationCodec.unpackInk(msg.ink || {});
+      if (!local && DELAYS.indexOf(msg.d) >= 0) playDelay = msg.d;
       undos = {}; redos = {};  // these describe ink that is no longer here
       incoming = {};           // and neither are the strokes these would extend
       render();
+    } else if (msg.a === 'delay') {
+      if (!local && DELAYS.indexOf(msg.d) >= 0) { playDelay = msg.d; sync(); }
     } else if (msg.a === 'start') {
       var arrival = incoming[msg.i] = {
         id: msg.i, key: msg.k, stroke: msg.s, tracing: 0,
-        waiting: [], origin: now() + DELAY, immediate: !!local
+        waiting: [], origin: now() + playDelay, immediate: !!local
       };
       // The first point waits its turn with the rest, so the stroke starts when
       // it was started rather than when word of it arrived.
@@ -1230,6 +1364,32 @@
       msg.s.p = [];
       (ink[msg.k] = ink[msg.k] || []).push(msg.s);
       play(arrival);
+    } else if (msg.a === 'rub') {
+      var list = ink[msg.k] || [];
+      var doomed = (msg.m || []).map(function (i) { return list[i]; });
+      var rubbing = incoming[msg.i];
+      if (rubbing) { doomed.push(rubbing.stroke); delete incoming[msg.i]; }
+      ink[msg.k] = list.filter(function (s) { return doomed.indexOf(s) === -1; });
+      // A stroke can still have points queued against the playback delay. Left
+      // alone, the frame that drains them paints it back after this render has
+      // taken it away, and it sits there as a ghost until the next full state.
+      Object.keys(incoming).forEach(function (id) {
+        if (doomed.indexOf(incoming[id].stroke) >= 0) delete incoming[id];
+      });
+      render();
+    } else if (msg.a === 'mark') {
+      var here = ink[msg.k] || [];
+      msg.m.forEach(function (i) {
+        if (!here[i]) return;
+        fading.add(here[i]);
+        var el = nodes.get(here[i]);
+        if (el) el.classList.add('ink-fading');
+      });
+      var scribbling = incoming[msg.i];
+      if (scribbling) {
+        fading.add(scribbling.stroke);
+        if (scribbling.trail) scribbling.trail.fade();
+      }
     } else if (incoming[msg.i]) {
       incoming[msg.i].waiting.push({ p: msg.p, x: msg.x || 0, d: msg.d || 0, last: msg.a === 'end' });
       play(incoming[msg.i]);
@@ -1283,6 +1443,7 @@
       arrival.trail = new Trail(arrival.stroke, layers[arrival.stroke.t], el);
       nodes.set(arrival.stroke, arrival.trail.el);
     }
+    if (fading.has(arrival.stroke)) arrival.trail.fade();
     if (unfinished) arrival.trail.draw();
     else arrival.trail.close();
   }
@@ -1407,6 +1568,7 @@
     showSelection();
     sync();
     save();
+    sendAll();
   }
 
   function nextSlide(create) {
@@ -1446,6 +1608,7 @@
     });
     render();
     save();
+    sendAll();
   }
 
   // The modifier reveal's zoom plugin magnifies on (ctrl on Linux, otherwise
@@ -1456,20 +1619,75 @@
     return ((cfg && cfg.zoomKey) || (/Linux/.test(navigator.platform) ? 'ctrl' : 'alt')) + 'Key';
   }
 
-  // The controls a tap has to be able to reach with a tool in hand: ours, and
-  // the ones reveal and its plugins put around the slide. Everything else
-  // inside the deck — including a link in the middle of a paragraph — is
-  // something to draw on, exactly as it was when a box over the slide took the
-  // input and covered them all.
-  var CHROME = '.ink-panel, .deck-launchers, .ink-text-editor, .controls, .progress,' +
-    '.slide-number, .speaker-controls';
+  // The controls a tap has to be able to reach with a tool in hand: ours, the
+  // ones reveal and its plugins put around the slide, and the slide's own.
+  //
+  // Said by where a thing sits rather than by name. Chrome is whatever lies
+  // over the deck without being part of a slide, so a panel another extension
+  // appends is reached without annotate having been told it exists. The list of
+  // class names this replaced could only name what was there when it was
+  // written: slide-stage's slide overview came later, was not on it, and a tap
+  // on a preview was taken as ink -- which on an iPad, with no Esc to fall back
+  // on, left the grid up with no way out of it at all.
+  //
+  // `.slides` is the boundary. Everything under it is a slide and is drawn on,
+  // a link in the middle of a paragraph included; everything over the deck and
+  // outside it is a control. The deck's own frame is neither, and ends the
+  // search: reaching one of these means there was nothing over the slide.
+  var STRUCTURE = '.reveal, [data-deck-stage], .deck-viewport-shell, body, html';
+  var SLIDES = '.reveal .slides';
+
+  // The exception inside a slide: its live controls -- the range a sweep is
+  // watched on, the button that redraws a sample. These are worked rather than
+  // drawn on, and the surface cuts a hole over each of them (see `clipSurface`)
+  // so that the contact reaches the control itself. A hole rather than a
+  // forwarded event because a native control moves for a trusted event and for
+  // nothing else: a synthesised pointer stream leaves a range where it was.
+  // The hole is a hole both ways -- what can be dragged cannot be drawn on.
+  var PASSTHROUGH = 'input, select, textarea, button, ' +
+    '[contenteditable=""], [contenteditable="true"]';
+
+  function inSlide(el) { return !!(el.closest && el.closest(SLIDES)); }
+
+  // Something to be worked rather than drawn on.
+  function reachable(el) {
+    if (!el || el === surface || !el.closest || !el.matches) return false;
+    if (inSlide(el)) return !!el.closest(PASSTHROUGH);
+    return !el.matches(STRUCTURE);
+  }
+
+  // The topmost such thing under a point, or null. Chrome that stacks *below*
+  // the surface -- reveal's arrows above all -- never becomes the target of
+  // anything, so the tip has to be looked under rather than the target asked.
+  // `elementsFromPoint` skips `pointer-events: none`, so the full-stage
+  // `.controls` box is not returned and only its buttons can match.
+  function chromeUnder(e) {
+    if (!document.elementsFromPoint || e.clientX === undefined) return null;
+    var stack = document.elementsFromPoint(e.clientX, e.clientY);
+    for (var i = 0; i < stack.length; i++) {
+      var el = stack[i];
+      if (el === surface || !el.closest || !el.matches) continue;
+      if (reachable(el)) return el;
+      // The first thing under the tip that is not reachable is the slide, or
+      // the frame around it: either way nothing was lying over it.
+      if (inSlide(el) || el.matches(STRUCTURE)) return null;
+    }
+    return null;
+  }
 
   function ours(e) {
     if (!tool) return false;
     // Mid-stroke everything is ours, wherever the tip has wandered to.
     if (live || erasing || lasso || moving || resizing || textMoving || touching !== null) return true;
     var t = e.target;
-    return !!t && (!t.closest || !t.closest(CHROME));
+    if (!t) return false;
+    // Chrome that stacks above the surface, and any control the surface has cut
+    // a hole over, reach us as themselves.
+    if (t !== surface && reachable(t)) return false;
+    // Chrome we cover reaches us with the surface as the target, so the check
+    // above cannot see it; look under the tip before taking the event.
+    if (t === surface && chromeUnder(e)) return false;
+    return true;
   }
 
   function down(e) {
@@ -1676,26 +1894,32 @@
   // the chalkboard plugin this replaced drew from touches — and an Apple
   // Pencil on an iPad is what this whole tool is for.
   //
-  // Only ever one of the two paths runs. Pointer events for a gesture are
-  // dispatched before its touch events, so the first pointerdown to arrive
-  // switches this off for the rest of the session; where pointer events work,
-  // these handlers never do anything.
+  // Only ever one of the two paths runs for a contact. Pointer events for a
+  // gesture are dispatched before its touch events, under the touch's own
+  // identifier, so a touch whose pointerdown has just been through down() --
+  // by id, or because the gesture it began is still in hand -- is left alone.
+  // The first pointerdown of the session switches fingers off for good; a
+  // stylus stays on, because iPadOS does not always send a pencil's pointer
+  // events -- while it is cancelling a palm beside it, for one -- and its
+  // touch events are then the only record of the stroke.
   function touchDown(e) {
-    if (pointers || touching !== null) return;
+    if (touching !== null || activePointer !== null) return;
     var t = e.changedTouches[0];
-    if (t.touchType === 'stylus') pen = true;
-    if (pen && t.touchType !== 'stylus') return;  // a palm, or a swipe
+    var stylus = t.touchType === 'stylus';
+    if (pointers && (!stylus || t.identifier === pointerId)) return;
+    if (stylus) pen = true;
+    if (pen && !stylus) return;  // a palm, or a swipe
     touching = t.identifier;
     down(asPointer(e, t));
   }
 
   function touchMove(e) {
-    var t = pointers ? null : sameTouch(e);
+    var t = sameTouch(e);
     if (t) move(asPointer(e, t));
   }
 
   function touchUp(e) {
-    var t = pointers ? null : sameTouch(e);
+    var t = sameTouch(e);
     if (!t) return;
     touching = null;
     up(asPointer(e, t));
@@ -1755,6 +1979,30 @@
     target.dispatchEvent(copy);
   }
 
+  // Standing aside is not enough on its own: the surface still has the contact,
+  // so the chrome under it never sees a click of its own. Reveal binds its
+  // arrows on ['touchstart', 'click'], so give the element the click it would
+  // have had -- on release, and only if the tip stayed put, so that a stroke
+  // begun over the corner is never mistaken for a tap.
+  var chromeTap = null;
+  var CHROME_TAP_SLOP = 12;
+
+  function forwardChromeTap(type, e) {
+    if (type === 'pointerdown') {
+      var el = e.target === surface ? chromeUnder(e) : null;
+      chromeTap = el ? { el: el, x: e.clientX, y: e.clientY } : null;
+      return;
+    }
+    if (type !== 'pointerup') return;
+    var tap = chromeTap;
+    chromeTap = null;
+    if (!tap || !tap.el.isConnected) return;
+    if (Math.abs(e.clientX - tap.x) > CHROME_TAP_SLOP ||
+        Math.abs(e.clientY - tap.y) > CHROME_TAP_SLOP) return;
+    if (chromeUnder(e) !== tap.el) return;
+    tap.el.click();
+  }
+
   function finishGesture() {
     activePointer = null;
     var drawn = live || erasing || lasso || moving || resizing || textMoving;
@@ -1770,14 +2018,16 @@
       moving = null;
       showSelection();
       save();
+      sendAll();
     } else if (resizing) {
       resizing = null;
       showSelection();
       save();
+      sendAll();
     } else if (textMoving) {
       var textSession = textMoving;
       textMoving = null;
-      if (textSession.moved) save();
+      if (textSession.moved) { save(); sendAll(); }
       else editText(textSession.start);
       sync();
     } else if (erasing) {
@@ -1816,13 +2066,21 @@
   // given back — scribble on across more ink and it joins them. What faded is
   // what goes.
   function scribble() {
+    var fresh = [];
     scribbleTargets(live.stroke).forEach(function (s) {
       if (marked.indexOf(s) !== -1) return;
       marked.push(s);
+      fresh.push(strokes().indexOf(s));
       var el = nodes.get(s);
       if (el) el.classList.add('ink-fading');
     });
-    if (!marked.length || armed) return;
+    if (!marked.length) return;
+    // A viewer is drawing the same stroke from the same points, in the same
+    // order, so the ink it is about to lose can be named by position. Without
+    // this the ink simply vanishes there while the presenter has watched it
+    // fade for a second first.
+    if (fresh.length) send({ a: 'mark', i: live.id, k: slideKey(), m: fresh });
+    if (armed) return;
     armed = true;
     live.trail.fade();
     sync();
@@ -1834,6 +2092,7 @@
   function scribbleTargets(stroke) {
     var p = simplify(stroke.p, SCRIBBLE.tolerance);
     if (p.length < 3 || reversals(p) < SCRIBBLE.reversals) return [];
+    if (progress(p) > SCRIBBLE.progress) return [];
     var box = bounds(p);
     return strokes().filter(function (s) {
       // Only ink of the same colour drawn with the same tool: highlighting over
@@ -1848,16 +2107,50 @@
 
   // Takes away everything currently marked — by a scribble, or by an eraser
   // drag. The snapshot taken when the gesture began is already the state to
-  // come back to, so this deletes without taking another: one undo puts
-  // everything back at once.
+  // come back to, so an eraser drag deletes without taking another: one undo
+  // puts everything back at once.
+  //
+  // A scribble takes a second one first, of the slide as it stands now: the
+  // gesture stroke present as ordinary ink and nothing erased yet. That state
+  // is never drawn, but it is the one a misfire wants — the letter whose last
+  // stroke was read as a scribble comes back whole, and a second undo then
+  // reaches the pre-gesture state an eraser drag reaches in one.
   function rub() {
+    var key = slideKey(), here = strokes();
     var gone = live ? marked.concat([live.stroke]) : marked;
-    ink[slideKey()] = strokes().filter(function (s) { return gone.indexOf(s) === -1; });
+    if (live) {
+      var stack = undos[key] = undos[key] || [];
+      stack.push(JSON.stringify(here));
+      if (stack.length > UNDO_DEPTH) stack.shift();
+    }
+    // A viewer holds the same strokes in the same order, so what goes can be
+    // named by position rather than by restating the deck -- the same way the
+    // scribble's `mark` names what it is about to take. The scribble stroke
+    // itself is still on its way there, so it goes by the id it arrived under.
+    var m = marked.map(function (s) { return here.indexOf(s); })
+      .filter(function (i) { return i >= 0; });
+    var scribbled = live ? live.id : null;
+    // `u` is filled in by the undo below. A scribble that is undone straight
+    // away is a false positive, stated as one by the person who saw it happen.
+    var log = erased[key] = erased[key] || [];
+    lastRub = { key: key, records: gone.map(function (s) {
+      var rec = {}, name;
+      for (name in s) rec[name] = s[name];
+      rec.x = {
+        g: live ? 'scribble' : 'eraser',
+        r: live && s === live.stroke ? 'gesture' : 'target',
+        t: Date.now() - sessionStarted,
+        u: 0
+      };
+      log.push(rec);
+      return rec;
+    }) };
+    ink[key] = here.filter(function (s) { return gone.indexOf(s) === -1; });
     armed = false;
     marked = [];
     render();  // takes the faded paths away along with the strokes they showed
     save();
-    sendAll();
+    send({ a: 'rub', k: key, m: m, i: scribbled });
   }
 
   /* ---------------------------------- UI --------------------------------- */
@@ -1866,8 +2159,12 @@
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
     pen: '<path d="M4 20l3.6-1L19.3 7.3a1.8 1.8 0 0 0 0-2.5l-1.1-1.1a1.8 1.8 0 0 0-2.5 0L4 15.4z"/><path d="M14.9 5.6l2.6 2.6"/>',
     text: '<path d="M5 5h14M12 5v14M8 19h8"/>',
-    highlighter: '<path d="M6.5 14.5l6-9.5 5.5 3.7-6.2 9.8H7.6z"/><path d="M4 21h16"/>',
-    eraser: '<path d="M15.6 4.4l4 4a1.6 1.6 0 0 1 0 2.2l-7.5 7.5a1.6 1.6 0 0 1-2.2 0l-4-4a1.6 1.6 0 0 1 0-2.2l7.5-7.5a1.6 1.6 0 0 1 2.2 0z"/><path d="M9 20h11"/>',
+    highlighter: '<path d="M7.7 3.2h8.6v7.4H7.7z"/>' +
+      '<path d="M7.7 10.6h8.6l-2.3 4.9h-4z" fill="' + HIGHLIGHT + '"/>' +
+      '<path d="M3.4 19.9h17.2" stroke="' + HIGHLIGHT + '" stroke-width="3.6"/>',
+    eraser: '<path d="M9.2 18.8l-4-4a1.6 1.6 0 0 1 0-2.3l3.8-3.8 6.3 6.3-3.8 3.8z" fill="' + RUBBER + '"/>' +
+      '<path d="M9.2 18.8l-4-4a1.6 1.6 0 0 1 0-2.3l7.6-7.6a1.6 1.6 0 0 1 2.3 0l4 4a1.6 1.6 0 0 1 0 2.3l-7.6 7.6z"/>' +
+      '<path d="M9.6 9.6l6.2 6.2"/><path d="M12.4 18.8h7.6"/>',
     select: '<path d="M5.2 6.4c2.5-3 9.8-3 12.8.2 3.5 3.7.8 9.9-4.7 11.7-5.6 1.8-10.4-1.3-9.1-5.8.8-2.7 4.4-4.2 8.1-3.4" stroke-dasharray="2.5 2.5"/><path d="M16.5 16.5l3.5 3.5"/>',
     copy: '<rect x="8" y="8" width="11" height="11" rx="1.5"/><path d="M16 8V5H5v11h3"/>',
     paste: '<path d="M9 6h6v3H9z"/><path d="M8 7H6v13h12V7h-2"/><path d="M9 13h6M9 17h5"/>',
@@ -1878,8 +2175,10 @@
     undo: '<path d="M4.5 9.5h10a4.5 4.5 0 0 1 0 9H9"/><path d="M8 5.5l-4 4 4 4"/>',
     redo: '<path d="M19.5 9.5h-10a4.5 4.5 0 0 0 0 9H15"/><path d="M16 5.5l4 4-4 4"/>',
     clear: '<path d="M4 7h16"/><path d="M9.5 7V4.5h5V7"/><path d="M6.5 7l1 12.5h9L17.5 7"/>',
+    'clear-deck': '<path d="M2 7h11"/><path d="M5.8 7V4.5h3.4V7"/><path d="M3.6 7l.8 12.5h6.2L11.4 7"/><path d="M15 7.5h7v5h-7z"/><path d="M15.5 16h6M15.5 19h4"/>',
     'delete-page': '<path d="M5 7h14"/><path d="M9 7V4.5h6V7"/><path d="M7 7l1 12h8l1-12"/><path d="M10 10.5v5M14 10.5v5"/>',
     rules: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+    pdf: '<path d="M13 3.5H7.5A1.5 1.5 0 0 0 6 5v14a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 18 19V8.5z"/><path d="M13 3.5V8.5h5"/><path d="M9 16.5v-4h1.6a1.2 1.2 0 0 1 0 2.4H9"/><path d="M13.5 12.5h2"/>',
     download: '<path d="M12 4v11"/><path d="M8 11.5l4 4 4-4"/><path d="M4.5 19.5h15"/>',
     upload: '<path d="M12 15.5v-11"/><path d="M8 8.5l4-4 4 4"/><path d="M4.5 19.5h15"/>',
     print: '<path d="M7.5 9.5V4.5h9v5"/><path d="M7.5 17.5H5.5A1.5 1.5 0 0 1 4 16v-5A1.5 1.5 0 0 1 5.5 9.5h13A1.5 1.5 0 0 1 20 11v5a1.5 1.5 0 0 1-1.5 1.5h-2"/><path d="M7.5 14h9v5.5h-9z"/>',
@@ -1912,7 +2211,7 @@
   // than racing through the whole palette at once. Ctrl-wheel remains the
   // browser's pinch/zoom gesture.
   function wheelColour(e) {
-    if (hidden || e.ctrlKey || !e.deltaY || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    if (e.ctrlKey || !e.deltaY || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
     e.preventDefault();
     e.stopPropagation();
     var now = Date.now();
@@ -1926,21 +2225,7 @@
     if (tool) lastTool = tool;
     tool = on ? lastTool : null;
     if (!on) moreOpen = false;
-    hidden = false;  // the ink comes back with the tools that made it
     sync();
-    sendAll();  // opening the tools is not itself ink, but the state is shared
-  }
-
-  // Park the ink: the slide as it was written, without the writing on it, for
-  // showing the audience the point before the working. Drawing is suspended
-  // while it is away — a stroke you cannot see is no use — and V brings back
-  // the ink, the panel and the tool that was in hand, all where they were.
-  function hide(on) {
-    if (on && editing) finishText(true);
-    hidden = on;
-    if (on) moreOpen = false;
-    sync();
-    sendAll();  // the audience is who the ink was parked for
   }
 
   // The colour this tool draws in: the swatch's own, except that the first one
@@ -1957,6 +2242,18 @@
 
   function inkColour() {
     return tool === 'highlighter' && colour === COLOURS[0][1] ? HIGHLIGHT : colour;
+  }
+
+  // What the ring around a tool is coloured: what that tool would put on the
+  // slide if you picked it up now. The pen and highlighter follow the chosen
+  // swatch -- the highlighter turning yellow on black, as its own swatch does
+  // -- and the eraser wears its rubber. A lasso and a text box lay down no
+  // ink, so they fall back to the neutral in the stylesheet.
+  function ringColour(name) {
+    if (name === 'pen') return colour;
+    if (name === 'highlighter') return colour === COLOURS[0][1] ? HIGHLIGHT : colour;
+    if (name === 'eraser') return RUBBER;
+    return null;
   }
 
   // Redraw the current slide's ink from scratch. The lists are short (a slide
@@ -1981,11 +2278,36 @@
     document.querySelectorAll('.ink-overview-layer').forEach(function (el) { el.remove(); });
   }
 
+  // Where the authored page goes while overview is open. A stage publishes the
+  // card it maps the page onto; without one the section *is* the page.
+  function overviewBox() {
+    var stage = document.querySelector('[data-deck-stage]');
+    if (!stage) return { left: '0', top: '0', width: '100%', height: '100%' };
+    var css = getComputedStyle(stage);
+    var edges = ['left', 'top', 'width', 'height'].map(function (edge) {
+      return css.getPropertyValue('--deck-overview-card-' + edge).trim();
+    });
+    if (edges.some(function (value) { return !value; })) {
+      return { left: '0', top: '0', width: '100%', height: '100%' };
+    }
+    return { left: edges[0], top: edges[1], width: edges[2], height: edges[3] };
+  }
+
+  // The geometry goes on the element itself, not in the stylesheet. These layers
+  // are children of a slide section, and a deck's theme styles those children:
+  // slide-stage shrinks them to its overview card, which took the layers out of
+  // absolute positioning. In flow they added their own height to the slide, and
+  // reveal centres a slide on the content it measures, so the heading was
+  // pushed up out of its card and the ink landed nowhere near the page it was
+  // drawn on. An inline style is the one thing a stylesheet cannot take back.
   function overviewLayer(slide, className) {
     var el = document.createElementNS(SVG_NS, 'svg');
+    var box = overviewBox();
     el.setAttribute('class', 'ink-overview-layer ' + className);
     el.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     el.setAttribute('aria-hidden', 'true');
+    el.style.cssText = 'position:absolute;zoom:1;left:' + box.left + ';top:' + box.top +
+      ';width:' + box.width + ';height:' + box.height;
     slide.appendChild(el);
     return el;
   }
@@ -1994,6 +2316,18 @@
   // of each slide's own ink inside its section so reveal's overview transform
   // scales it along with the page. The live layers stay hidden there because
   // they represent only one slide and would otherwise float over the grid.
+  // A cell in the grid is a few hundred pixels wide, so the copy in it is
+  // drawn from a stroke thinned to what that cell can show. A page of
+  // handwriting is megabytes of outline at full detail, and the grid holds one
+  // copy of every page at once: an iPad runs out of memory over it.
+  var PREVIEW_TOLERANCE = 300;   // page widths per unit of simplification
+
+  function preview(stroke) {
+    var p = overviewPoints.get(stroke);
+    if (!p) overviewPoints.set(stroke, p = simplify(stroke.p, W / PREVIEW_TOLERANCE));
+    return { t: stroke.t, c: stroke.c, w: stroke.w, s: stroke.s, p: p };
+  }
+
   function renderOverview() {
     clearOverview();
     if (!window.Reveal || !Reveal.isOverview || !Reveal.isOverview()) return;
@@ -2009,7 +2343,7 @@
         var drawn = list.filter(function (stroke) { return stroke.t === t; });
         if (!drawn.length) return;
         var layer = overviewLayer(slide, 'ink-overview-' + t);
-        drawn.forEach(function (stroke) { layer.appendChild(pathFor(stroke)); });
+        drawn.forEach(function (stroke) { layer.appendChild(pathFor(preview(stroke))); });
       });
       var text = list.filter(isText);
       if (text.length) {
@@ -2019,23 +2353,144 @@
     });
   }
 
+  // Reveal's own controls: the arrows, and whatever a plugin puts beside them.
+  // They sit inside `.reveal` and outside `.slides`, under the surface rather
+  // than over it, so they need holes cut for them the way a slide's own
+  // controls do -- and for a sharper reason. Reveal binds them on
+  // `['touchstart', 'click']`, and on a touch device on `['touchstart']` alone:
+  // the click listener is not merely a second way in, it is gone. Handing such
+  // an arrow a click reaches nothing at all, which is why the arrows worked in
+  // every desktop browser and were drawn on by a pencil on the iPad.
+  //
+  // Leaf controls only. `.controls` is a box the size of the stage and a hole
+  // that shape would be the whole slide.
+  var REVEAL_CHROME = 'button, a[href], [role="button"]';
+
+  function revealChrome() {
+    var root = window.Reveal && Reveal.getRevealElement && Reveal.getRevealElement();
+    if (!root) return [];
+    return [].filter.call(root.querySelectorAll(REVEAL_CHROME), function (el) {
+      return !el.closest(SLIDES);
+    });
+  }
+
+  // Worth a hole only if a contact would reach it: reveal leaves the arrow it
+  // cannot navigate to in place and takes its pointer events away, and a
+  // control on an unrevealed fragment has no box yet. A hole over either is a
+  // hole in the slide where nothing can be drawn and nothing can be pressed.
+  function takesAContact(el) {
+    var style = getComputedStyle(el);
+    if (style.pointerEvents === 'none' || style.visibility === 'hidden') return false;
+    if (parseFloat(style.opacity) < 0.1) return false;
+    var r = el.getBoundingClientRect();
+    return !!(r.width && r.height);
+  }
+
+  // Holes that overlap have to become one hole before they are drawn.
+  //
+  // `evenodd` counts crossings, so a point inside two holes is inside an even
+  // number of them and the surface closes over it again -- solid again exactly
+  // where two controls meet, which is the corner reveal stacks its arrows and
+  // its slide number in. `nonzero` with the holes wound the other way cancels
+  // in the same way. Overlapping boxes are therefore merged into the box that
+  // contains them, repeatedly, until none of them touch: a little more than was
+  // asked for at a corner where both neighbours are controls anyway.
+  function merged(rects) {
+    var out = rects.slice();
+    for (var again = true; again; ) {
+      again = false;
+      for (var i = 0; i < out.length && !again; i++) {
+        for (var j = i + 1; j < out.length; j++) {
+          var a = out[i], b = out[j];
+          if (a.x > b.x2 || b.x > a.x2 || a.y > b.y2 || b.y > a.y2) continue;
+          out[i] = {
+            x: Math.min(a.x, b.x), y: Math.min(a.y, b.y),
+            x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2)
+          };
+          out.splice(j, 1);
+          again = true;
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
+  // Cut a hole in the input surface over every live control on the slide, so
+  // that a pencil reaches the control rather than this.
+  //
+  // Standing aside in `ours()` is not enough for these the way it is for a
+  // button: a forwarded click drives a JavaScript listener, which is all
+  // reveal's arrows are, but a range or a checkbox is moved by the browser's
+  // own default action and that runs on trusted events only. The contact has to
+  // land on the control, which means the surface must not be what is under the
+  // tip -- and hit testing, unlike anything `ours()` can decide after the fact,
+  // is settled before the event exists. So the surface is given the shape it
+  // needs in advance.
+  //
+  // `clip-path` coordinates are the element's own, before the stage's fit
+  // transform; `getBoundingClientRect` reports after it. Hence the scale.
+  function clipSurface() {
+    if (!surface) return;
+    var slide = window.Reveal && Reveal.getCurrentSlide && Reveal.getCurrentSlide();
+    var holes = tool && slide ? [].slice.call(slide.querySelectorAll(PASSTHROUGH)) : [];
+    if (tool) holes = holes.concat(revealChrome());
+    holes = holes.filter(takesAContact);
+    if (!holes.length) { surface.style.clipPath = ''; return; }
+
+    var box = surface.getBoundingClientRect();
+    var w = surface.offsetWidth, h = surface.offsetHeight;
+    var scale = w && box.width ? box.width / w : 1;
+    if (!w || !h || !scale) { surface.style.clipPath = ''; return; }
+
+    var rects = merged(holes.map(function (el) {
+      var r = el.getBoundingClientRect();
+      return {
+        x: (r.left - box.left) / scale, y: (r.top - box.top) / scale,
+        x2: (r.right - box.left) / scale, y2: (r.bottom - box.top) / scale
+      };
+    }));
+
+    var d = 'M0 0H' + w + 'V' + h + 'H0Z';
+    rects.forEach(function (r) {
+      d += 'M' + r.x + ' ' + r.y + 'H' + r.x2 + 'V' + r.y2 + 'H' + r.x + 'Z';
+    });
+    surface.style.clipPath = rects.length ? 'path(evenodd, "' + d + '")' : '';
+  }
+
+  // Reveal enables and disables its arrows while handling the same
+  // `slidechanged` this is hung off, and a fragment moves what it moves after
+  // the event rather than during it. Measuring on the frame after settles both,
+  // and coalesces the burst of resizes a rotating iPad sends.
+  var clipQueued = false;
+  function reclip() {
+    if (clipQueued) return;
+    clipQueued = true;
+    requestAnimationFrame(function () { clipQueued = false; clipSurface(); });
+  }
+
   function sync() {
-    var key = slideKey(), on = !!tool && !hidden;
+    var key = slideKey(), on = !!tool;
     panel.classList.toggle('active', on);
     surface.classList.toggle('drawing', on);
+    // Now, so the holes are there for a tip already on its way down, and again
+    // on the next frame: reveal marks an arrow usable in its own time, and a
+    // hole measured a moment too early is one the arrow never gets.
+    clipSurface();
+    reclip();
     surface.classList.toggle('ink-text-mode', tool === 'text');
     surface.classList.toggle('ink-text-dragging', !!textMoving && textMoving.moved);
     if (tool !== 'text') surface.classList.remove('ink-text-target');
-    Object.keys(layers).forEach(function (t) {
-      layers[t].classList.toggle('ink-hidden', hidden);
-    });
-    guide.classList.toggle('ink-rules-hidden', !ruled || hidden);
-    selectionLayer.classList.toggle('ink-hidden', hidden || tool !== 'select');
+    guide.classList.toggle('ink-rules-hidden', !ruled);
+    selectionLayer.classList.toggle('ink-hidden', tool !== 'select');
     // A recognised scribble lights the eraser, but only on the panel: the tool
     // itself has to stay the pen, or the stroke being drawn would be cut off.
     var shown = armed ? 'eraser' : tool;
     panel.querySelectorAll('[data-tool]').forEach(function (b) {
       b.classList.toggle('active', b.dataset.tool === shown);
+      var ring = ringColour(b.dataset.tool);
+      if (ring) b.style.setProperty('--ink-ring', ring);
+      else b.style.removeProperty('--ink-ring');
     });
     panel.querySelectorAll('[data-colour]').forEach(function (b) {
       b.classList.toggle('active', b.dataset.colour === colour);
@@ -2055,6 +2510,10 @@
     act('undo').disabled = !(undos[key] || []).length;
     act('redo').disabled = !(redos[key] || []).length;
     act('clear').disabled = !strokes().length;
+    act('clear-deck').disabled = !Object.keys(ink).some(function (k) { return ink[k].length; });
+    // Only the pad can delete a page; a lecture deck has nothing to delete, so
+    // the entry goes rather than sitting there greyed out for good.
+    act('delete-page').hidden = !window.AnnotatePages || !AnnotatePages.count();
     act('delete-page').disabled = !window.AnnotatePages || !AnnotatePages.canRemove();
     act('copy').disabled = !selected.length;
     act('paste').disabled = !clipboard || !clipboard.strokes.length;
@@ -2069,8 +2528,14 @@
       'M8 ' + (11 - gap) + 'H44 M8 11H44 M8 ' + (11 + gap) + 'H44');
     rulePreview.setAttribute('aria-label', 'Rule spacing: ' + ruleSpacing + ' slide units');
     act('pressure').classList.toggle('active', pressureEnabled);
+    // A viewer is told the delay rather than choosing it, and shows it greyed.
+    var mine = MUX !== 'viewer';
+    panel.querySelector('.ink-delay text').textContent = playDelay + ' ms';
+    act('delay-less').disabled = !mine || playDelay <= DELAYS[0];
+    act('delay-more').disabled = !mine || playDelay >= DELAYS[DELAYS.length - 1];
     act('more').classList.toggle('active', moreOpen);
     act('more').setAttribute('aria-expanded', moreOpen ? 'true' : 'false');
+    panel.querySelector('.ink-warning').hidden = !storageFull;
     panel.querySelector('.ink-more').hidden = !moreOpen || !on;
     panel.querySelector('.ink-selection-actions').hidden =
       tool !== 'select' || moreOpen || (!selected.length && !clipboard);
@@ -2137,7 +2602,7 @@
     // navigation reads the same pointer events, so a stroke can be kept from
     // it by stopping propagation (down(), move() and up() do).
     var input = {
-      pointerdown: function (e) { pointers = true; down(e); forwardSwipe(e); },
+      pointerdown: function (e) { pointers = true; pointerId = e.pointerId; down(e); forwardSwipe(e); },
       pointermove: function (e) { move(e); forwardSwipe(e); },
       pointerup: function (e) { up(e); forwardSwipe(e); },
       pointercancel: up,
@@ -2149,7 +2614,7 @@
     Object.keys(input).forEach(function (type) {
       window.addEventListener(type, function (e) {
         var handled = ours(e);
-        if (!handled) { trace(type, e, false); return; }
+        if (!handled) { forwardChromeTap(type, e); trace(type, e, false); return; }
         // iPadOS decides for itself what a pencil or a finger on the page
         // means — scroll it, select the text under the tip, start a system
         // gesture — and having decided, it cancels the stream the stroke was
@@ -2158,7 +2623,7 @@
         // refuses them on the canvas it hands an Apple Pencil. Non-passive, or
         // the browser is free to ignore the refusal.
         if (type.indexOf('touch') === 0 && e.cancelable) e.preventDefault();
-        input[type](e);
+        try { input[type](e); } catch (err) { trace(type, e, true, String(err)); throw err; }
         trace(type, e, true);
       }, { capture: true, passive: false });
     });
@@ -2217,9 +2682,11 @@
       '<hr>' +
       button('data-tool', 'pen', 'Pen') +
       button('data-tool', 'highlighter', 'Highlighter') +
-      button('data-tool', 'text', 'Text box') +
+      '<hr>' +
       button('data-tool', 'eraser', 'Eraser (whole strokes; or hold the right button)') +
+      '<hr>' +
       button('data-tool', 'select', 'Lasso and move') +
+      button('data-tool', 'text', 'Text box') +
       '<hr>' +
       button('data-act', 'undo', 'Undo (⌘Z)') +
       button('data-act', 'redo', 'Redo (⇧⌘Z)') +
@@ -2230,6 +2697,8 @@
         button('data-act', 'paste', 'Paste copied ink (⌘V)') +
         button('data-act', 'delete', 'Delete selection (Delete)', 'clear') +
       '</div>' +
+      '<div class="ink-warning" role="status" hidden>Storage full &mdash; ink is no ' +
+        'longer being saved. Export it from the more menu.</div>' +
       '<div class="ink-more" role="group" aria-label="Annotation options" hidden>' +
         '<div class="ink-more-title">Stroke width</div>' +
         '<div class="ink-width-row">' +
@@ -2251,9 +2720,19 @@
           button('data-act', 'rules-farther', 'Move ruled lines farther apart', 'thicker') +
         '</div>' +
         option('data-act', 'pressure', 'Pencil pressure', 'Apple Pencil pressure changes stroke width') +
+        '<div class="ink-more-title ink-rule-title">Replay delay</div>' +
+        '<div class="ink-delay-row">' +
+          button('data-act', 'delay-less', 'Shorter replay delay for viewers', 'thinner') +
+          '<svg class="ink-delay" width="52" height="22" viewBox="0 0 52 22" fill="currentColor" ' +
+          'opacity="0.65"><title>How long a viewer holds each packet before drawing it</title>' +
+          '<text x="26" y="16" text-anchor="middle" font-size="13"></text></svg>' +
+          button('data-act', 'delay-more', 'Longer replay delay for viewers', 'thicker') +
+        '</div>' +
         '<hr>' +
         option('data-act', 'clear', 'Clear this slide', 'Clear this slide (⇧ for the whole deck)') +
+        option('data-act', 'clear-deck', 'Clear this deck', 'Clear the annotations on every slide') +
         option('data-act', 'delete-page', 'Delete this page') +
+        '<hr>' +
         option('data-act', 'pdf', 'Download annotated PDF') +
         option('data-act', 'download', 'Export annotations') +
         option('data-act', 'upload', 'Import annotations') +
@@ -2276,12 +2755,9 @@
     if (!toolsOpen) {
       toggle = document.createElement('button');
       toggle.className = 'deck-launcher ink-toggle ink-pen';
-      toggle.title = 'Annotate (d), hide the ink (v)';
+      toggle.title = 'Annotate (d)';
       toggle.innerHTML = icon('pen');
-      toggle.addEventListener('click', function () {
-        if (hidden) return hide(false);  // parked ink comes back before anything else
-        open(!tool);
-      });
+      toggle.addEventListener('click', function () { open(!tool); });
     }
 
     var parent = document.querySelector('[data-deck-stage]') || Reveal.getRevealElement();
@@ -2328,12 +2804,16 @@
         deleteSelection();
       } else if (b.dataset.act === 'clear') {
         clear(e.shiftKey);
+      } else if (b.dataset.act === 'clear-deck') {
+        clear(true);
       } else if (b.dataset.act === 'delete-page') {
         deletePage();
       } else if (b.dataset.act === 'rules') {
         toggleRules();
       } else if (b.dataset.act === 'rules-closer' || b.dataset.act === 'rules-farther') {
         resizeRules(b.dataset.act === 'rules-farther');
+      } else if (b.dataset.act === 'delay-less' || b.dataset.act === 'delay-more') {
+        stepDelay(b.dataset.act === 'delay-more');
       } else if (b.dataset.act === 'pressure') {
         togglePressure();
       } else if (b.dataset.act === 'more') {
@@ -2359,6 +2839,10 @@
     build();
     render();
     var opts = (Reveal.getConfig && Reveal.getConfig().annotate) || {};
+    // Re-read rather than assign: what the deck sets is the default, and both
+    // readers prefer a value this browser has already stored.
+    if (opts.penWidth > 0) { WIDTHS.pen = opts.penWidth; widths = readWidths(); }
+    if (DELAYS.indexOf(opts.delay) >= 0) { DELAY = opts.delay; playDelay = readDelay(); }
     toolsOpen = opts.tools === 'open';
     if (toolsOpen && !tool) open(true);
     showChrome(chrome);
@@ -2375,15 +2859,31 @@
     Reveal.on('slidechanged', function () {
       if (editing) finishText(true);
       render();
+      reclip();
       if (Reveal.isOverview()) renderOverview();
     });
+    // The holes are measured from where the controls are, so anything that
+    // moves them has to be followed: a fragment that reflows the slide, and the
+    // stage being refitted to a resized window or a rotated iPad.
+    Reveal.on('fragmentshown', reclip);
+    Reveal.on('fragmenthidden', reclip);
+    Reveal.on('ready', reclip);
+    window.addEventListener('resize', reclip);
+    window.addEventListener('orientationchange', reclip);
+    // The previews are a grid of slides rather than something to write on, so
+    // the tools go away for the duration -- and come back as they were. Opening
+    // them on the way out hands a pen to a deck that was closed when it went in,
+    // which `o` twice did on every lecture deck, and which the relay passed on
+    // to every window following the presenter through the overview.
+    var toolsBeforeOverview = false;
     Reveal.on('overviewshown', function () {
+      toolsBeforeOverview = !!tool;
       open(false);
       renderOverview();
     });
     Reveal.on('overviewhidden', function () {
       clearOverview();
-      open(true);
+      open(toolsBeforeOverview);
     });
     // Quarto's support plugin binds R to its scroll view and lets reveal fall
     // into it on a narrow viewport; both break a fixed stage you write on.
@@ -2392,14 +2892,7 @@
 
     Reveal.addKeyBinding(
       { keyCode: 68, key: 'D', description: 'Toggle drawing tools' },
-      function () {
-        if (hidden) return hide(false);  // parked ink comes back before anything else
-        open(!tool);
-      }
-    );
-    Reveal.addKeyBinding(
-      { keyCode: 86, key: 'V', description: 'Hide/show the annotations' },
-      function () { hide(!hidden); }
+      function () { open(!tool); }
     );
     Reveal.addKeyBinding(
       { keyCode: 82, key: 'R', description: 'Show/hide ruled writing guides' },

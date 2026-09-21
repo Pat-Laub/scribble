@@ -13,16 +13,29 @@
     api.attach(root);
   }
 })(typeof window !== 'undefined' ? window : this, function () {
-  function createGuard() {
-    var active = new Set();
+  // iPadOS does not always report that a contact lifted: a system gesture can
+  // claim it, or the app can suspend mid-touch. Such a contact goes quiet, so
+  // treat one that has produced no events for this long as gone.
+  var STALE_MS = 3000;
+
+  function createGuard(now) {
+    var clock = now || Date.now;
+    var active = new Map();
     var rejected = false;
 
     return function block(type, e) {
       if (e.pointerType !== 'touch') return false;
+      var at = clock();
 
       if (type === 'pointerdown') {
-        active.add(e.pointerId);
+        active.forEach(function (seen, id) {
+          if (at - seen > STALE_MS) active.delete(id);
+        });
+        if (!active.size) rejected = false;
+        active.set(e.pointerId, at);
         if (active.size > 1) rejected = true;
+      } else if (active.has(e.pointerId)) {
+        active.set(e.pointerId, at);
       }
 
       var blocked = rejected && active.has(e.pointerId);

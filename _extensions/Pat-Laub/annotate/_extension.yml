@@ -29,6 +29,11 @@ contributes:
           # pad wants; a lecture deck opens as a deck and gets a corner button.
           tools: closed
           pages: false
+          # Starting nib width, in slide coordinates, and the delay a viewer
+          # holds each packet before drawing it. Both are only defaults: a
+          # width or delay the presenter has already stepped is remembered.
+          penWidth: 12.3
+          delay: 20
           # How the annotated PDF is made. `generate` draws the pages here;
           # `overlay` reads a PDF published beside the deck and writes the ink
           # into it, keeping the deck's own typography. `{deck}` in pdfSource is

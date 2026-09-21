@@ -10,6 +10,9 @@
 // at a fraction of everything beside it.
 
 $ink-accent: #2668c7 !default;
+// The ring on the tool in hand, for the tools that draw in no colour of their
+// own. The ones that do -- pen, highlighter, eraser -- set `--ink-ring`.
+$ink-ring: #9b9790 !default;
 $ink-panel-width: 132px !default;
 $ink-button-size: 102px !default;
 // Matches the icon the stage draws in the corner row the pen joins.
@@ -67,11 +70,6 @@ $ink-launcher-icon: 120px !default;
   .ink-fading {
     opacity: 0.3;
   }
-
-  // Parked by the V key: the ink is still there, just not on show.
-  &.ink-hidden {
-    display: none;
-  }
 }
 
 // A local writing aid, deliberately separate from the annotation model. In a
@@ -98,10 +96,9 @@ $ink-launcher-icon: 120px !default;
 
 .deck-stage .ink-selection-layer {
   position: absolute;
-  left: -100%;
-  top: -100%;
-  width: 300%;
-  height: 300%;
+  // Same box as the ink layers: it shares their viewBox, so anything else
+  // scales and shifts the lasso away from the pointer that drew it.
+  inset: 0;
   overflow: visible;
   pointer-events: none;
   z-index: 14;
@@ -150,7 +147,9 @@ $ink-launcher-icon: 120px !default;
   &.ink-overview-highlighter {
     z-index: 12;
     opacity: 0.4;
-    mix-blend-mode: multiply;
+    // No `mix-blend-mode` here, unlike the live layer: blending an element
+    // inside reveal's transformed overview costs a buffer the size of the
+    // whole authored page, per slide, and at this size it does not show.
   }
 
   &.ink-overview-rules {
@@ -264,6 +263,18 @@ $ink-launcher-icon: 120px !default;
   }
 }
 
+.deck-stage .ink-delay-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 9px;
+
+  .ink-delay {
+    flex: 1;
+    height: 80px;
+  }
+}
+
 .deck-stage .ink-btn,
 .deck-stage .ink-swatch,
 .deck-stage .ink-option {
@@ -290,7 +301,17 @@ $ink-launcher-icon: 120px !default;
   }
 }
 
-.deck-stage .ink-btn.active,
+// The tool in hand wears a ring in the colour it will draw, the way a chosen
+// swatch already does. It is drawn inside the button: the rail is 132px across
+// and a button 102px, so a ring outside it would sit on the panel's edge.
+// A filled block would also be $ink-accent, which is the Blue swatch exactly --
+// the mark for "this tool" cannot be one of the five colours it draws in.
+.deck-stage .ink-btn.active {
+  box-shadow: inset 0 0 0 7px var(--ink-ring, #{$ink-ring});
+}
+
+// The labelled rows in the tray are not the rail: nothing there draws, so
+// there is no colour to carry and the plain fill still reads best.
 .deck-stage .ink-option.active {
   background: $ink-accent;
   color: #fff;
@@ -325,6 +346,28 @@ $ink-launcher-icon: 120px !default;
     margin: 18px 0;
     border: 0;
     background: rgba(0, 0, 0, 0.15);
+  }
+}
+
+// The store filling up stops the ink being kept while it stays on screen, so
+// the notice sits beside the rail where the pen already is, and stays until a
+// save succeeds.
+.deck-stage .ink-warning {
+  position: absolute;
+  bottom: 0;
+  right: calc(100% + 24px);
+  width: 900px;
+  padding: 24px 30px;
+  border-radius: 24px;
+  background: #fff3cd;
+  box-shadow: 0 6px 36px rgba(0, 0, 0, 0.25);
+  color: #6b4d00;
+  font-size: 48px;
+  line-height: 1.3;
+  text-align: left;
+
+  &[hidden] {
+    display: none;
   }
 }
 
@@ -408,6 +451,10 @@ $ink-launcher-icon: 120px !default;
   cursor: default;
 }
 
+.deck-stage .ink-option[hidden] {
+  display: none;
+}
+
 // Each swatch shows its colour as a dot; the button's `color` is set inline by
 // annotate.js, so the dot and its selection ring both just use currentColor.
 .deck-stage .ink-swatch::before {
@@ -456,7 +503,10 @@ $ink-launcher-icon: 120px !default;
     display: none !important;
   }
 }
-.reveal.overview {
+// The layers hang off the stage, which is an *ancestor* of `.reveal`, so a
+// `.reveal.overview` descendant rule never reaches them.
+.reveal.overview,
+.deck-stage:has(.reveal.overview) {
   .ink-panel,
   .deck-launchers,
   .ink-guide,
@@ -570,6 +620,59 @@ $ink-launcher-icon: 120px !default;
   }
 
   .deck-stage > .ink-surface.drawing { pointer-events: auto !important; }
+}
+
+// Which mode the window opened in, said once and then taken away by
+// multiplex.js: a projected screen is not to carry a permanent caption.
+.multiplex-mode {
+  position: fixed;
+  left: 50%;
+  top: 42px;
+  transform: translateX(-50%);
+  z-index: 60;
+  padding: 12px 36px;
+  border-radius: 2997px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 39px;
+  font-family: sans-serif;
+  animation: multiplex-mode-out 4s ease-in forwards;
+}
+
+@keyframes multiplex-mode-out {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+// The one control an audience window has: it appears when the window has been
+// moved by hand and is no longer following, and goes away when it is.
+.multiplex-detached {
+  position: fixed;
+  left: 50%;
+  bottom: 42px;
+  transform: translateX(-50%);
+  z-index: 61;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 18px 12px 36px;
+  border-radius: 2997px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 39px;
+  font-family: sans-serif;
+
+  &[hidden] { display: none; }
+
+  button {
+    padding: 6px 30px;
+    border: 0;
+    border-radius: 2997px;
+    background: #fff;
+    color: #000;
+    font: inherit;
+    cursor: pointer;
+  }
 }
 
 // Shown only when the presenting device is on a different deck, so the slides

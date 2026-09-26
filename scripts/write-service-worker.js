@@ -36,9 +36,13 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  if (event.request.mode === 'navigate') {
+    event.respondWith(fetch(event.request).catch(() =>
+      caches.open(VERSION).then((cache) => cache.match('index.html'))));
+    return;
+  }
   event.respondWith(caches.open(VERSION).then((cache) =>
     cache.match(event.request, { ignoreSearch: true })
-      .then((hit) => hit || (event.request.mode === 'navigate' ? cache.match('index.html') : undefined))
       .then((hit) => hit || fetch(event.request))));
 });
 `;

@@ -2912,8 +2912,19 @@
     // goes to stopping that fling instead of to the button under it, and the
     // tool it was for is not chosen. Nothing here scrolls, so refuse the move
     // itself, as the ink surface does. Not the touchstart: that would take the
-    // click away from every button.
+    // click away from every button. Nor the first pixels of a move: an Apple
+    // Pencil jitters through a few of them on every tap, and WebKit drops the
+    // click of a tap whose moves were refused.
+    var railTouch = null;
+    panel.addEventListener('touchstart', function (e) {
+      var t = e.changedTouches[0];
+      railTouch = { x: t.clientX, y: t.clientY };
+    }, { passive: true });
     panel.addEventListener('touchmove', function (e) {
+      var t = e.changedTouches[0];
+      if (railTouch && Math.abs(t.clientX - railTouch.x) <= CHROME_TAP_SLOP &&
+          Math.abs(t.clientY - railTouch.y) <= CHROME_TAP_SLOP) return;
+      railTouch = null;
       if (e.cancelable) e.preventDefault();
     }, { passive: false });
     // The stage owns the corner row and the full-screen button in it; the pen

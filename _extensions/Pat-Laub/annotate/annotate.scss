@@ -549,6 +549,13 @@ $ink-launcher-icon: 120px !default;
   text-align: left;
 }
 
+.deck-stage .ink-version {
+  padding: 0 15px;
+  color: rgba(0, 0, 0, 0.5);
+  font-size: 36px;
+  text-align: left;
+}
+
 .deck-stage .ink-width-row {
   display: flex;
   align-items: center;

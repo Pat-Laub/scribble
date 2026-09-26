@@ -23,6 +23,8 @@
 // Styling — and why there is a layer per tool — is in annotate.scss.
 (function () {
   if (!window.perfectFreehand) return;
+  // The release this is; release-extension.sh refuses a tag that disagrees.
+  var VERSION = '0.41.2';
   var getStroke = perfectFreehand.getStroke;
 
   /* ---------------------------- configuration ---------------------------- */
@@ -2879,6 +2881,8 @@
         option('data-act', 'pdf', 'Download annotated PDF') +
         option('data-act', 'download', 'Export annotations') +
         option('data-act', 'upload', 'Import annotations') +
+        '<hr>' +
+        '<div class="ink-version">Annotate v' + VERSION + '</div>' +
       '</div>';
 
     // The file to load is chosen with an input the panel keeps out of sight;

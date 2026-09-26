@@ -476,23 +476,29 @@
     };
   }
 
+  function highlighterForm(page, options) {
+    var out = [];
+    page.highlighter.forEach(function (stroke) {
+      out.push(colour(stroke.colour) + ' rg');
+      out.push(quadraticPathToPdf(stroke.path));
+      out.push('f');
+    });
+    var contents = out.join('\n');
+    return '<< /Type /XObject /Subtype /Form /FormType 1' +
+      ' /BBox [0 0 ' + number(options.width) + ' ' + number(options.height) + ']' +
+      ' /Group << /S /Transparency /CS /DeviceRGB /I true /K false >>' +
+      ' /Resources << >> /Length ' + contents.length + ' >>\nstream\n' + contents + '\nendstream';
+  }
+
   function inkStream(page, spot, options) {
     var out = ['q'];
     out.push([number(spot.sx), 0, 0, number(-spot.sy), number(spot.x), number(spot.y)].join(' ') + ' cm');
     // Clip to the same fixed slide box used by the live annotation SVG.
     out.push('0 0 ' + number(options.width) + ' ' + number(options.height) + ' re W n');
-    if (page.highlighter.length) {
-      // One saved state for the whole group: /InkHL carries the 40% multiply
-      // that the live highlighter layer gets from CSS, and applying it per
-      // stroke would let overlapping strokes compound into dark blotches.
-      out.push('q /InkHL gs');
-      page.highlighter.forEach(function (stroke) {
-        out.push(colour(stroke.colour) + ' rg');
-        out.push(quadraticPathToPdf(stroke.path));
-        out.push('f');
-      });
-      out.push('Q');
-    }
+    // The highlighter strokes sit in a transparency group, /InkHLForm, so the
+    // 40% multiply the live layer gets from CSS applies once to their union;
+    // /ca on each fill would let overlapping strokes compound into dark blotches.
+    if (page.highlighter.length) out.push('q /InkHL gs /InkHLForm Do Q');
     page.pen.forEach(function (stroke) {
       out.push(colour(stroke.colour) + ' rg');
       out.push(quadraticPathToPdf(stroke.path));
@@ -523,29 +529,26 @@
     return out + '\n>>';
   }
 
-  // Add /InkHL to the page's own ExtGState. Both writers in this pipeline put
+  // Add a named resource to the page's own /ExtGState or /XObject. Both writers in this pipeline put
   // /Resources inline in the page dictionary, so that is the case handled here;
   // an indirect one is left alone and the highlighter simply draws opaque
   // rather than the whole export failing.
-  function withGraphicsState(dict, reference) {
+  function withResource(dict, category, name, reference) {
     var resources = lookup(dict, '/Resources');
     if (!resources || resources.value.charAt(0) !== '<') return null;
-    var states = lookup(resources.value, '/ExtGState');
-    var updated;
-    if (!states) {
-      updated = rebuild(resources.value, {
-        '/ExtGState': function () { return '<< /InkHL ' + reference + ' 0 R >>'; }
-      });
-    } else if (states.value.charAt(0) === '<') {
-      updated = rebuild(resources.value, {
-        '/ExtGState': function (value) {
-          return value.slice(0, value.lastIndexOf('>>')) +
-            ' /InkHL ' + reference + ' 0 R ' + value.slice(value.lastIndexOf('>>'));
-        }
-      });
+    var existing = lookup(resources.value, category);
+    var replacements = {};
+    if (!existing) {
+      replacements[category] = function () { return '<< ' + name + ' ' + reference + ' 0 R >>'; };
+    } else if (existing.value.charAt(0) === '<') {
+      replacements[category] = function (value) {
+        return value.slice(0, value.lastIndexOf('>>')) +
+          ' ' + name + ' ' + reference + ' 0 R ' + value.slice(value.lastIndexOf('>>'));
+      };
     } else {
-      return null;  // an indirect ExtGState; not worth a second rewrite
+      return null;  // an indirect dictionary; not worth a second rewrite
     }
+    var updated = rebuild(resources.value, replacements);
     return rebuild(dict, { '/Resources': function () { return updated; } });
   }
 
@@ -619,7 +622,9 @@
         if (highlight === null) {
           highlight = add('<< /Type /ExtGState /ca 0.4 /CA 0.4 /BM /Multiply >>');
         }
-        var shaded = withGraphicsState(dict, highlight);
+        var form = add(highlighterForm(page, options));
+        var shaded = withResource(dict, '/ExtGState', '/InkHL', highlight);
+        if (shaded) shaded = withResource(shaded, '/XObject', '/InkHLForm', form);
         // No room for the state: draw the highlighter as opaque ink rather
         // than dropping it, so nothing written is silently missing.
         if (shaded) dict = shaded;

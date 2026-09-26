@@ -1,4 +1,4 @@
-const VERSION = "scribble-182a3b6eed21";
+const VERSION = "scribble-d304b2773ad6";
 const FILES = [
   "apple-touch-icon.png",
   "icon-192.png",
@@ -36,13 +36,14 @@ const FILES = [
   "index_files/libs/revealjs/dist/theme/fonts/source-sans-pro/source-sans-pro-semibolditalic.ttf",
   "index_files/libs/revealjs/dist/theme/fonts/source-sans-pro/source-sans-pro-semibolditalic.woff",
   "index_files/libs/revealjs/dist/theme/fonts/source-sans-pro/source-sans-pro.css",
+  "index_files/libs/revealjs/dist/theme/quarto-2e9fe607c51929acdcf521055f80c550.css",
   "index_files/libs/revealjs/dist/theme/quarto-cafe7bbabf5ef9c0b95b7beaf98df4f9.css",
   "index_files/libs/revealjs/plugin/annotate/annotate-codec-4f180b57059f.js",
-  "index_files/libs/revealjs/plugin/annotate/annotate-e42cdcd23db2.js",
+  "index_files/libs/revealjs/plugin/annotate/annotate-fc3321d1d986.js",
   "index_files/libs/revealjs/plugin/annotate/annotate-geometry-43788bd40d25.js",
   "index_files/libs/revealjs/plugin/annotate/annotate-model-3a71aa2e3281.js",
   "index_files/libs/revealjs/plugin/annotate/annotate-pages-2af095def630.js",
-  "index_files/libs/revealjs/plugin/annotate/annotate-pdf-9ad49863bff1.js",
+  "index_files/libs/revealjs/plugin/annotate/annotate-pdf-5a1b804c1bf2.js",
   "index_files/libs/revealjs/plugin/annotate/palm-rejection-5124b7a316ef.js",
   "index_files/libs/revealjs/plugin/annotate/perfect-freehand.min.js",
   "index_files/libs/revealjs/plugin/highlight/highlight.esm.js",

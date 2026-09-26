@@ -1,4 +1,4 @@
-const VERSION = "scribble-b64ba00d2e81";
+const VERSION = "scribble-fc31e15f8855";
 const FILES = [
   "apple-touch-icon.png",
   "icon-192.png",
@@ -37,8 +37,8 @@ const FILES = [
   "index_files/libs/revealjs/dist/theme/fonts/source-sans-pro/source-sans-pro-semibolditalic.woff",
   "index_files/libs/revealjs/dist/theme/fonts/source-sans-pro/source-sans-pro.css",
   "index_files/libs/revealjs/dist/theme/quarto-2e9fe607c51929acdcf521055f80c550.css",
+  "index_files/libs/revealjs/plugin/annotate/annotate-bfd2fe022e75.js",
   "index_files/libs/revealjs/plugin/annotate/annotate-codec-4f180b57059f.js",
-  "index_files/libs/revealjs/plugin/annotate/annotate-fc3321d1d986.js",
   "index_files/libs/revealjs/plugin/annotate/annotate-geometry-43788bd40d25.js",
   "index_files/libs/revealjs/plugin/annotate/annotate-model-3a71aa2e3281.js",
   "index_files/libs/revealjs/plugin/annotate/annotate-pages-2af095def630.js",

@@ -13,8 +13,24 @@ $ink-accent: #2668c7 !default;
 // The ring on the tool in hand, for the tools that draw in no colour of their
 // own. The ones that do -- pen, highlighter, eraser -- set `--ink-ring`.
 $ink-ring: #9b9790 !default;
-$ink-panel-width: 132px !default;
+$ink-panel-width: 180px !default;
+// The buttons in the options tray and the rows under the rail.
 $ink-button-size: 102px !default;
+// The rail is aimed at with a thumb mid-lecture, so it gets bigger targets than
+// the tray: as wide as the rail leaves room for, and as long as sharing out
+// $ink-panel-length between them makes them -- never less than square.
+$ink-rail-button-width: 150px !default;
+$ink-rail-icon: 76px !default;
+// How long the rail is, as a share of the stage's height, whichever way it
+// lies: turned along the top or bottom it keeps the length and the buttons it
+// had standing up. Not all of it: the ends of a side are left for whatever the
+// slide keeps there.
+$ink-panel-length: 0.75 !default;
+// The handle the rail is dragged by, across its length.
+$ink-grip-size: 84px !default;
+// How far the rail keeps from the stage's edges, and the gap between the rail
+// and whatever opens beside it.
+$ink-dock-margin: 24px !default;
 // Matches the icon the stage draws in the corner row the pen joins.
 $ink-launcher-icon: 120px !default;
 
@@ -234,18 +250,28 @@ $ink-launcher-icon: 120px !default;
   // Absolute inside the stage, not fixed: the stage's transform would be the
   // containing block for `fixed` regardless, so say what is meant. Offsets are
   // authored page units and scale with everything else.
+  //
+  // Where on the stage it sits is set inline by placePanel() in annotate.js:
+  // the deck's `dock` option says where it starts, and its grip moves it.
   position: absolute;
-  top: 50%;
-  // This blank-paper deck has no side bar, so keep the panel just inside the
-  // right edge.
-  right: 24px;
-  transform: translateY(-50%);
+  left: 0;
+  top: 0;
   z-index: 45;
   display: none;
   flex-direction: column;
   align-items: center;
+  box-sizing: border-box;
   width: $ink-panel-width;
-  padding: 15px 0;
+  min-height: calc(#{$ink-panel-length} * var(--ink-stage-height, 100%));
+  max-height: calc(100% - #{2 * $ink-dock-margin});
+  padding: 0 0 15px;
+  // A thumb that rolls a little while it taps would otherwise be read as the
+  // start of a pan, and a cancelled pan leaves no click: the tool the tap was
+  // for is never chosen. Nothing on the rail scrolls, so refuse the gesture.
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
   border-radius: 36px;
   background: #fff;
   box-shadow: 0 6px 36px rgba(0, 0, 0, 0.25);
@@ -255,11 +281,64 @@ $ink-launcher-icon: 120px !default;
   }
 
   > hr {
-    width: 66px;
+    flex: none;
+    width: 84px;
     height: 3px;
     margin: 12px 0;
     border: 0;
     background: rgba(0, 0, 0, 0.15);
+  }
+
+  // Along the top or the bottom: the same rail, lying down.
+  &.ink-across {
+    flex-direction: row;
+    width: auto;
+    height: $ink-panel-width;
+    min-width: calc(#{$ink-panel-length} * var(--ink-stage-height, 100%));
+    max-width: calc(100% - #{2 * $ink-dock-margin});
+    min-height: 0;
+    padding: 0 15px 0 0;
+
+    > hr {
+      width: 3px;
+      height: 84px;
+      margin: 0 12px;
+    }
+  }
+}
+
+// What the rail is moved by. It takes the pointer itself (see dragPanel() in
+// annotate.js), so a drag here is never ink and never a tap on a tool.
+.deck-stage > .ink-panel > .ink-grip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: $ink-grip-size;
+  cursor: grab;
+  touch-action: none;
+
+  &::before {
+    content: "";
+    width: 66px;
+    height: 12px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.3);
+  }
+}
+
+.deck-stage > .ink-panel.ink-dragging > .ink-grip {
+  cursor: grabbing;
+}
+
+.deck-stage > .ink-panel.ink-across > .ink-grip {
+  width: $ink-grip-size;
+  height: 100%;
+
+  &::before {
+    width: 12px;
+    height: 66px;
   }
 }
 
@@ -301,9 +380,35 @@ $ink-launcher-icon: 120px !default;
   }
 }
 
+// The rail's own buttons, sized for a thumb. They share out whatever height the
+// panel has beyond their square minimum, so a taller stage gives each of them a
+// taller target rather than leaving a gap at the ends. The rows in the tray and
+// the selection actions are not children of the rail and keep the plain size.
+.deck-stage > .ink-panel > .ink-btn,
+.deck-stage > .ink-panel > .ink-swatch {
+  // From a basis of nothing, so a swatch and a tool come out the same height
+  // whatever each holds.
+  flex: 1 1 0;
+  width: $ink-rail-button-width;
+  height: auto;
+  min-height: $ink-button-size;
+
+  .ink-across > & {
+    width: auto;
+    height: $ink-rail-button-width;
+    min-width: $ink-button-size;
+    min-height: 0;
+  }
+
+  svg {
+    width: $ink-rail-icon;
+    height: $ink-rail-icon;
+  }
+}
+
 // The tool in hand wears a ring in the colour it will draw, the way a chosen
-// swatch already does. It is drawn inside the button: the rail is 132px across
-// and a button 102px, so a ring outside it would sit on the panel's edge.
+// swatch already does. It is drawn inside the button: the rail is 180px across
+// and a button 150px, so a ring outside it would sit on the panel's edge.
 // A filled block would also be $ink-accent, which is the Blue swatch exactly --
 // the mark for "this tool" cannot be one of the five colours it draws in.
 .deck-stage .ink-btn.active {
@@ -368,6 +473,50 @@ $ink-launcher-icon: 120px !default;
 
   &[hidden] {
     display: none;
+  }
+}
+
+// The tray, the selection actions and the storage notice open on whichever
+// side of the rail faces into the stage, which placePanel() says as
+// `data-open`. The rules above are the rail on the right, opening leftwards.
+.deck-stage > .ink-panel[data-open="right"] {
+  .ink-more,
+  .ink-selection-actions,
+  .ink-warning {
+    right: auto;
+    left: calc(100% + #{$ink-dock-margin});
+  }
+}
+
+.deck-stage > .ink-panel[data-open="up"],
+.deck-stage > .ink-panel[data-open="down"] {
+  .ink-more,
+  .ink-selection-actions {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .ink-warning {
+    right: 0;
+  }
+}
+
+.deck-stage > .ink-panel[data-open="up"] {
+  .ink-more,
+  .ink-selection-actions,
+  .ink-warning {
+    top: auto;
+    bottom: calc(100% + #{$ink-dock-margin});
+  }
+}
+
+.deck-stage > .ink-panel[data-open="down"] {
+  .ink-more,
+  .ink-selection-actions,
+  .ink-warning {
+    top: calc(100% + #{$ink-dock-margin});
+    bottom: auto;
   }
 }
 
@@ -459,8 +608,8 @@ $ink-launcher-icon: 120px !default;
 // annotate.js, so the dot and its selection ring both just use currentColor.
 .deck-stage .ink-swatch::before {
   content: "";
-  width: 51px;
-  height: 51px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   background: currentColor;
 }

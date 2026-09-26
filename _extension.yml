@@ -29,6 +29,10 @@ contributes:
           # pad wants; a lecture deck opens as a deck and gets a corner button.
           tools: closed
           pages: false
+          # Where the tool rail starts: right, left, top or bottom. It can
+          # always be dragged by its grip, and lies down along the top or
+          # bottom; where it was left is remembered per deck in this browser.
+          dock: right
           # Starting nib width, in slide coordinates, and the delay a viewer
           # holds each packet before drawing it. Both are only defaults: a
           # width or delay the presenter has already stepped is remembered.

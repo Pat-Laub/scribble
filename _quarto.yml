@@ -11,6 +11,7 @@ project:
     # Give Safari a new URL whenever annotation code changes. The generated
     # filenames use content hashes, matching Quarto's treatment of its CSS.
     - node scripts/fingerprint-annotation-assets.js
+    - node scripts/write-service-worker.js
 
 format:
   # The fixed 16:9 stage and the reveal.js fixes come from the
@@ -43,6 +44,8 @@ format:
     slide-number: c/t
     # The deck is the whole page — no scrollbars, no reveal "scroll view".
     embed-resources: false
+    # Nothing is typeset, and MathJax would be the one file fetched from a CDN.
+    html-math-method: plain
     preview-links: false
     # The pad is edge to edge -- no inset content frame and no rail -- so
     # reveal's frame is the whole authored page. scribble.scss zeroes the

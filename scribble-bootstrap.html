@@ -8,6 +8,9 @@
 <meta name="theme-color" content="#ffffff">
 
 <script>
+// sw.js (written at render time) caches the pad so it opens offline.
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+
 // Reveal may normalise an as-yet unbuilt dynamic slide hash to page one during
 // startup. Capture the requested page before Reveal initialises.
 window.__scribbleInitialHash = window.location.hash;

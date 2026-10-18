@@ -16,3 +16,12 @@ test('the portrait pad keeps its ink apart from the landscape one', async ({ pag
   await openPad(page, 'portrait.html');
   await expect(paths(page)).toHaveCount(0);
 });
+
+test('a corner button swaps between the landscape and portrait pads', async ({ page }) => {
+  await openPad(page);
+  await page.locator('.deck-launchers .scribble-swap').click();
+  await expect(page).toHaveURL(/\/portrait\.html(#.*)?$/);
+  await page.waitForFunction(() => window.Reveal && Reveal.isReady());
+  await page.locator('.deck-launchers .scribble-swap').click();
+  await expect(page).toHaveURL(/\/index\.html(#.*)?$/);
+});

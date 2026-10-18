@@ -36,7 +36,9 @@ contributes:
           # Starting nib width, in slide coordinates, and the delay a viewer
           # holds each packet before drawing it. Both are only defaults: a
           # width or delay the presenter has already stepped is remembered.
-          penWidth: 12.3
+          penWidth: 5
+          # Width of the laser trail, in slide coordinates.
+          laserWidth: 15
           delay: 20
           # How the annotated PDF is made. `generate` draws the pages here;
           # `overlay` reads a PDF published beside the deck and writes the ink

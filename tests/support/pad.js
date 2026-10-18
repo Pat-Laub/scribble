@@ -1,8 +1,8 @@
 const { expect } = require('@playwright/test');
 
 // The pad opens with the tools already in hand and one blank page.
-async function openPad(page) {
-  await page.goto('/docs/index.html');
+async function openPad(page, deck = 'index.html') {
+  await page.goto(`/docs/${deck}`);
   await page.waitForFunction(() => window.Reveal && Reveal.isReady());
   await page.locator('.ink-surface').waitFor();
   return page;

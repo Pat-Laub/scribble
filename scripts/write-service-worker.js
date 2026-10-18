@@ -6,7 +6,7 @@ const path = require('node:path');
 // app opens without a network. Run after fingerprinting: the cache is named
 // after a hash of every precached file, so any change to the site gives a new
 // sw.js, which Safari installs on the next online launch.
-const ROOT_FILES = ['index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
+const ROOT_FILES = ['index.html', 'portrait.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 function listFiles(outputDir, dir) {
   return fs.readdirSync(path.join(outputDir, dir), { withFileTypes: true }).flatMap((entry) => {
@@ -16,7 +16,7 @@ function listFiles(outputDir, dir) {
 }
 
 function writeServiceWorker(outputDir) {
-  const files = [...ROOT_FILES, ...listFiles(outputDir, 'index_files')].sort();
+  const files = [...ROOT_FILES, ...listFiles(outputDir, 'index_files'), ...listFiles(outputDir, 'portrait_files')].sort();
   const hash = crypto.createHash('sha256');
   for (const file of files) hash.update(file).update(fs.readFileSync(path.join(outputDir, file)));
   const version = `scribble-${hash.digest('hex').slice(0, 12)}`;
@@ -38,7 +38,8 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   if (event.request.mode === 'navigate') {
     event.respondWith(fetch(event.request).catch(() =>
-      caches.open(VERSION).then((cache) => cache.match('index.html'))));
+      caches.open(VERSION).then((cache) => cache.match(event.request, { ignoreSearch: true })
+        .then((hit) => hit || cache.match('index.html')))));
     return;
   }
   event.respondWith(caches.open(VERSION).then((cache) =>

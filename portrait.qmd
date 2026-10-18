@@ -1,0 +1,11 @@
+---
+# The same pad turned upright. Ink and pages are stored per URL, so this deck
+# keeps its own notebook apart from index.html.
+format:
+  slide-stage-revealjs:
+    theme: [white, scribble.scss, scribble-portrait.scss, _extensions/Pat-Laub/annotate/annotate.scss]
+    width: 2106
+    height: 3744
+---
+
+## {#scribble-slide-001 .annotation-slide-heading}

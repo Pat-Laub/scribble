@@ -14,4 +14,24 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 // Reveal may normalise an as-yet unbuilt dynamic slide hash to page one during
 // startup. Capture the requested page before Reveal initialises.
 window.__scribbleInitialHash = window.location.hash;
+
+// A corner button that opens the other pad: landscape (index.html) and
+// portrait (portrait.html) each keep their own pages and ink.
+document.addEventListener('DOMContentLoaded', function () {
+  var stage = document.querySelector('[data-deck-stage]');
+  if (!stage || !stage.deckLaunchers) return;
+  var portrait = /\/portrait\.html$/.test(window.location.pathname);
+  var swap = document.createElement('button');
+  swap.className = 'deck-launcher scribble-swap';
+  swap.title = portrait ? 'Landscape pad' : 'Portrait pad';
+  swap.setAttribute('aria-label', swap.title);
+  swap.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
+    (portrait ? '<rect x="3" y="6.5" width="18" height="11" rx="1.5"/>'
+              : '<rect x="6.5" y="3" width="11" height="18" rx="1.5"/>') + '</svg>';
+  swap.addEventListener('click', function () {
+    window.location.href = portrait ? 'index.html' : 'portrait.html';
+  });
+  stage.deckLaunchers.appendChild(swap);
+});
 </script>

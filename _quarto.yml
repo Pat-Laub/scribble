@@ -50,7 +50,7 @@ format:
     # The pad is edge to edge -- no inset content frame and no rail -- so
     # reveal's frame is the whole authored page. scribble.scss zeroes the
     # stage's content insets to match; the two have to agree.
-    width: 3744
+    width: 2808
     height: 2106
     # The MIT-licensed freehand annotation tool. Ink is saved per slide in the
     # browser's localStorage and can be exported. The reveal.js fixes it used to

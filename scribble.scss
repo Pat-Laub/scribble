@@ -12,6 +12,10 @@ $content-right: 0px;
 $content-bottom: 0px;
 $rail-width: 0px;
 
+// Must agree with `width`/`height` in _quarto.yml: the 12.9-inch iPad's 4:3.
+$deck-width: 2808px;
+$deck-height: 2106px;
+
 $backgroundColor: #ffffff;
 $mainColor: #1d1d1d;
 // Used by the slide counter and reveal's arrows; the drawing rail reads

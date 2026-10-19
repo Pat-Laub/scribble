@@ -1,4 +1,4 @@
-const VERSION = "scribble-1222a9c904b1";
+const VERSION = "scribble-5792d68f7605";
 const FILES = [
   "apple-touch-icon.png",
   "icon-192.png",
@@ -36,7 +36,7 @@ const FILES = [
   "index_files/libs/revealjs/dist/theme/fonts/source-sans-pro/source-sans-pro-semibolditalic.ttf",
   "index_files/libs/revealjs/dist/theme/fonts/source-sans-pro/source-sans-pro-semibolditalic.woff",
   "index_files/libs/revealjs/dist/theme/fonts/source-sans-pro/source-sans-pro.css",
-  "index_files/libs/revealjs/dist/theme/quarto-d5e140b93585573c871507736235ea3c.css",
+  "index_files/libs/revealjs/dist/theme/quarto-aa929c21705a38351dbd15798417deeb.css",
   "index_files/libs/revealjs/plugin/annotate/annotate-1f2dd0824e87.js",
   "index_files/libs/revealjs/plugin/annotate/annotate-codec-d2d3a8197411.js",
   "index_files/libs/revealjs/plugin/annotate/annotate-geometry-5973512c4e2a.js",
@@ -118,7 +118,7 @@ const FILES = [
   "portrait_files/libs/revealjs/dist/theme/fonts/source-sans-pro/source-sans-pro-semibolditalic.ttf",
   "portrait_files/libs/revealjs/dist/theme/fonts/source-sans-pro/source-sans-pro-semibolditalic.woff",
   "portrait_files/libs/revealjs/dist/theme/fonts/source-sans-pro/source-sans-pro.css",
-  "portrait_files/libs/revealjs/dist/theme/quarto-7425e4410769c96c689259757cfd55b6.css",
+  "portrait_files/libs/revealjs/dist/theme/quarto-aa929c21705a38351dbd15798417deeb.css",
   "portrait_files/libs/revealjs/plugin/annotate/annotate-1f2dd0824e87.js",
   "portrait_files/libs/revealjs/plugin/annotate/annotate-codec-d2d3a8197411.js",
   "portrait_files/libs/revealjs/plugin/annotate/annotate-geometry-5973512c4e2a.js",

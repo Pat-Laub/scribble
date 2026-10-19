@@ -1,7 +1,7 @@
 # scribble
 
-A 16:9 blank reveal.js deck that grows a page at a time, with no title page and no typeset content.
-It is drawn on the fixed 3744 x 2106 stage from the `Pat-Laub/slide-stage` format
+A 4:3 blank reveal.js deck that grows a page at a time, with no title page and no typeset content.
+It is drawn at 2808 x 2106 (portrait.html: 2106 x 2808), the 12.9-inch iPad's shape, on the stage from the `Pat-Laub/slide-stage` format
 extension, vendored as a git subtree in `_extensions/`, so the pad and the
 lecture decks share one coordinate system.
 Drawing uses the MIT-licensed [perfect-freehand](https://github.com/steveruizok/perfect-freehand) package through the self-contained `annotate.js` tool.
@@ -14,9 +14,9 @@ The drawing tools are open as soon as the deck starts. The compact rail keeps th
 
 Annotations are saved locally by each slide's explicit ID and survive reloads, reordering, or insertion of other slides. Use the panel's export/import buttons to move them to another browser or device. Exports also include a bounded, session-only interaction trace and device details for diagnosing input failures; nothing in that trace is sent or persisted by the app. Give every new slide a unique ID; Reveal fragment animations remain part of their containing slide, while uncounted replacement slides need their own IDs.
 
-The writing canvas is 16:9 so its visible left and right edges agree with Overview and PDF pages on modern widescreen displays. On screens with a different aspect ratio, a hairline and subtly shaded margins distinguish the space outside the target 16:9 canvas; those local guides are omitted from Overview and PDF output.
+The writing canvas is 4:3 so it fills a 12.9-inch iPad Pro in either orientation. On screens with a different aspect ratio, a hairline and subtly shaded margins distinguish the space outside the target 4:3 canvas; those local guides are omitted from Overview and PDF output.
 
-Choose **Download annotated PDF** in the options to save a vector PDF directly. Its pages retain the deck's 16:9 shape without depending on the browser's paper-size settings; pen and highlighter strokes remain sharp, and enabled ruled guides use their current spacing on every page. If direct PDF creation is unavailable, the app falls back to Reveal's print view and the browser's PDF dialog.
+Choose **Download annotated PDF** in the options to save a vector PDF directly. Its pages retain the deck's 4:3 shape without depending on the browser's paper-size settings; pen and highlighter strokes remain sharp, and enabled ruled guides use their current spacing on every page. If direct PDF creation is unavailable, the app falls back to Reveal's print view and the browser's PDF dialog.
 
 ## Keyboard shortcuts
 

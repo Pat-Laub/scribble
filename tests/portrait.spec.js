@@ -25,3 +25,13 @@ test('a corner button swaps between the landscape and portrait pads', async ({ p
   await page.locator('.deck-launchers .scribble-swap').click();
   await expect(page).toHaveURL(/\/index\.html(#.*)?$/);
 });
+
+for (const [file, width, height] of [['index.html', 1366, 1024], ['portrait.html', 1024, 1366]]) {
+  test(`${file} fills a 12.9-inch iPad screen without bars`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await openPad(page, file);
+    const box = await page.locator('[data-deck-stage]').boundingBox();
+    expect(box.width).toBeCloseTo(width, 0);
+    expect(box.height).toBeCloseTo(height, 0);
+  });
+}

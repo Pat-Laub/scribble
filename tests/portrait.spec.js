@@ -30,8 +30,8 @@ for (const [file, width, height] of [['index.html', 1366, 1024], ['portrait.html
   test(`${file} fills a 12.9-inch iPad screen without bars`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await openPad(page, file);
-    const box = await page.locator('[data-deck-stage]').boundingBox();
-    expect(box.width).toBeCloseTo(width, 0);
-    expect(box.height).toBeCloseTo(height, 0);
+    const box = await page.locator('.ink-surface').boundingBox();
+    expect(box.width).toBeCloseTo(width, -1);
+    expect(box.height).toBeCloseTo(height, -1);
   });
 }

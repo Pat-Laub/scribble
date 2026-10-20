@@ -1,4 +1,4 @@
-const VERSION = "scribble-5792d68f7605";
+const VERSION = "scribble-a05d0c3e6446";
 const FILES = [
   "apple-touch-icon.png",
   "icon-192.png",
@@ -118,7 +118,7 @@ const FILES = [
   "portrait_files/libs/revealjs/dist/theme/fonts/source-sans-pro/source-sans-pro-semibolditalic.ttf",
   "portrait_files/libs/revealjs/dist/theme/fonts/source-sans-pro/source-sans-pro-semibolditalic.woff",
   "portrait_files/libs/revealjs/dist/theme/fonts/source-sans-pro/source-sans-pro.css",
-  "portrait_files/libs/revealjs/dist/theme/quarto-aa929c21705a38351dbd15798417deeb.css",
+  "portrait_files/libs/revealjs/dist/theme/quarto-c479c5654165be0eec1ac9f5751205e7.css",
   "portrait_files/libs/revealjs/plugin/annotate/annotate-1f2dd0824e87.js",
   "portrait_files/libs/revealjs/plugin/annotate/annotate-codec-d2d3a8197411.js",
   "portrait_files/libs/revealjs/plugin/annotate/annotate-geometry-5973512c4e2a.js",

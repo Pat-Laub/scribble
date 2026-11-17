@@ -1,4 +1,4 @@
-const VERSION = "scribble-fc0756dbf4db";
+const VERSION = "scribble-c6d8fdadcac0";
 const FILES = [
   "apple-touch-icon.png",
   "icon-192.png",

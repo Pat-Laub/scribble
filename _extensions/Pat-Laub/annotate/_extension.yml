@@ -43,7 +43,12 @@ contributes:
           # How the annotated PDF is made. `generate` draws the pages here;
           # `overlay` reads a PDF published beside the deck and writes the ink
           # into it, keeping the deck's own typography. `{deck}` in pdfSource is
-          # this deck's path without its extension.
+          # this deck's path without its extension. `print` has the browser
+          # print reveal's print view of the deck with the ink laid over it, and
+          # is an overlay on an iPad, which prints to A4 regardless. Promises
+          # pushed onto `window.printPending` in the print view are waited for
+          # first. A cancelable `annotate-export` event on the document, with
+          # the mode in its detail, comes before any export.
           pdf: generate
           pdfSource: "{deck}.pdf"
     # The relay that mirrors a presenter's slide position and ink onto the

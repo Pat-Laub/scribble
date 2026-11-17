@@ -724,6 +724,18 @@ $ink-launcher-icon: 120px !default;
   }
 }
 
+// The print view a `print` export is made from: laid out at this window's
+// size and never seen.
+.ink-export {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 // Offers the browser dialog again if it is dismissed. This is screen chrome,
 // not slide content, and the print media rule below keeps it out of the PDF.
 .ink-print-bar {
@@ -768,18 +780,18 @@ $ink-launcher-icon: 120px !default;
   }
 }
 
-// The audience view is on a projector, so it carries no controls at all: the
-// annotation panel and its corner buttons are for the presenting device, and
-// reveal's own arrows and progress bar would only invite someone to click them.
+// The audience view is on a projector. The annotation panel is for the
+// presenting device, so it goes; the arrows and corner buttons are left to
+// slide-stage's `stage-chrome: auto-hide`, which shows them only while the
+// mouse moves. The progress bar stays as a gauge, with its click taken away.
 // The ink itself stays, since showing it is the whole point of that view.
 // `multiplex-audience` is set on <html> by the multiplex plugin.
 .multiplex-audience {
-  .deck-stage > .ink-panel,
-  .deck-stage > .deck-launchers,
-  .reveal .controls,
-  .reveal .progress {
+  .deck-stage > .ink-panel {
     display: none !important;
   }
+
+  .reveal .progress { pointer-events: none; }
 
   // The pointer has no job on this screen.
   .deck-stage > .ink-surface { pointer-events: none !important; }
@@ -796,28 +808,32 @@ $ink-launcher-icon: 120px !default;
 }
 
 .multiplex-audience.ink-chrome-on {
-  .deck-stage > .ink-panel.active,
-  .deck-stage > .deck-launchers {
+  .deck-stage > .ink-panel.active {
     display: flex !important;
   }
 
   .deck-stage > .ink-surface.drawing { pointer-events: auto !important; }
 }
 
-// Which mode the window opened in, said once and then taken away by
-// multiplex.js: a projected screen is not to carry a permanent caption.
-.multiplex-mode {
+// Every audience-window message: bottom centre, half the slide text size.
+%multiplex-pill {
   position: fixed;
   left: 50%;
-  top: 42px;
+  bottom: 42px;
   transform: translateX(-50%);
   z-index: 60;
-  padding: 12px 36px;
+  padding: 0.3em 0.9em;
   border-radius: 2997px;
   background: rgba(0, 0, 0, 0.55);
   color: #fff;
-  font-size: 39px;
+  font-size: calc(var(--r-main-font-size, 39px) * 0.5 * var(--chip-scale, 1));
   font-family: sans-serif;
+}
+
+// Which mode the window opened in, said once and then taken away by
+// multiplex.js: a projected screen is not to carry a permanent caption.
+.multiplex-mode {
+  @extend %multiplex-pill;
   animation: multiplex-mode-out 4s ease-in forwards;
 }
 
@@ -829,20 +845,12 @@ $ink-launcher-icon: 120px !default;
 // The one control an audience window has: it appears when the window has been
 // moved by hand and is no longer following, and goes away when it is.
 .multiplex-detached {
-  position: fixed;
-  left: 50%;
-  bottom: 42px;
-  transform: translateX(-50%);
+  @extend %multiplex-pill;
   z-index: 61;
   display: flex;
   align-items: center;
   gap: 0.6em;
   padding: 0.3em 0.45em 0.3em 0.9em;
-  border-radius: 2997px;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  font-size: calc(var(--r-main-font-size, 39px) * var(--chip-scale, 1));
-  font-family: sans-serif;
 
   &[hidden] { display: none; }
 
@@ -860,17 +868,17 @@ $ink-launcher-icon: 120px !default;
 // Shown only when the presenting device is on a different deck, so the slides
 // deliberately stop following. Small and low-contrast: it is projected.
 .multiplex-notice {
-  position: fixed;
-  left: 50%;
-  bottom: 42px;
-  transform: translateX(-50%);
-  z-index: 60;
+  @extend %multiplex-pill;
   display: none;
-  padding: 12px 36px;
-  border-radius: 2997px;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  font-size: 39px;
-  font-family: sans-serif;
+}
+
+// Left alone, the window lets its messages go; multiplex.js brings them back.
+.multiplex-quiet {
+  .multiplex-detached,
+  .multiplex-notice {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.6s, visibility 0s 0.6s;
+  }
 }
 
